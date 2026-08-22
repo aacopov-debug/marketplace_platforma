@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect, UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect, UploadFile, File, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -818,8 +818,12 @@ async def post_message(task_id: int, message: MessageCreate, token: str = Depend
     await manager.broadcast(message_dict, task_id)
     return message_dict
 
+def public_file_url(request: Request, file_path: str) -> str:
+    """Полный URL файла по фактическому адресу бэкенда (работает и локально, и на Render)"""
+    return f"{str(request.base_url).rstrip('/')}/{file_path}"
+
 @app.post("/upload/avatar")
-async def upload_avatar(file: UploadFile = File(...), token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+async def upload_avatar(request: Request, file: UploadFile = File(...), token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """Upload user avatar"""
     payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     user_id = int(payload.get("sub"))
@@ -831,13 +835,14 @@ async def upload_avatar(file: UploadFile = File(...), token: str = Depends(oauth
 
     # Save new avatar
     file_path = save_upload_file(file, "avatars")
-    user.avatar = file_path
+    url = public_file_url(request, file_path)
+    user.avatar = url
     db.commit()
 
-    return {"message": "Avatar uploaded", "url": f"http://localhost:8000/{file_path}"}
+    return {"message": "Avatar uploaded", "url": url}
 
 @app.post("/upload/portfolio")
-async def upload_portfolio(file: UploadFile = File(...), token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+async def upload_portfolio(request: Request, file: UploadFile = File(...), token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """Upload portfolio image for specialist"""
     payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     user_id = int(payload.get("sub"))
@@ -848,25 +853,26 @@ async def upload_portfolio(file: UploadFile = File(...), token: str = Depends(oa
 
     # Save image
     file_path = save_upload_file(file, "portfolio")
+    url = public_file_url(request, file_path)
 
     # Add to portfolio JSON array
     import json as json_lib
     portfolio = json_lib.loads(user.portfolio) if user.portfolio else []
-    portfolio.append(file_path)
+    portfolio.append(url)
     user.portfolio = json_lib.dumps(portfolio)
     db.commit()
 
-    return {"message": "Portfolio image uploaded", "url": f"http://localhost:8000/{file_path}"}
+    return {"message": "Portfolio image uploaded", "url": url}
 
 @app.post("/upload/task-image")
-async def upload_task_image(file: UploadFile = File(...), token: str = Depends(oauth2_scheme)):
+async def upload_task_image(request: Request, file: UploadFile = File(...), token: str = Depends(oauth2_scheme)):
     """Upload task image (returns URL to include in task creation)"""
     payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
 
     # Save image
     file_path = save_upload_file(file, "tasks")
 
-    return {"message": "Task image uploaded", "url": f"http://localhost:8000/{file_path}"}
+    return {"message": "Task image uploaded", "url": public_file_url(request, file_path)}
 
 def decode_token_or_401(token: str):
     """Декодирует JWT; при истёкшем/невалидном токене возвращает 401 вместо 500"""
