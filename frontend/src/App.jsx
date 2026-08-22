@@ -716,7 +716,7 @@ const TaskPage = () => {
 
                 <div className="p-6">
                     <div className="font-display font-bold text-3xl mb-4">{task.budget} ₽</div>
-                    <p className="text-ink/80 whitespace-pre-wrap font-medium">{task.description}</p>
+                    <p className="text-ink/80 whitespace-pre-wrap break-words font-medium">{task.description}</p>
 
                     {images.length > 0 && (
                         <div className="grid grid-cols-3 gap-3 mt-6">
@@ -881,7 +881,7 @@ const PublicProfilePage = () => {
                 {user.bio && (
                     <div className="p-6 border-b border-ink/15">
                         <div className="text-[11px] font-extrabold uppercase tracking-wider text-ink/50 mb-2">О себе</div>
-                        <p className="text-ink/80 whitespace-pre-wrap font-medium">{user.bio}</p>
+                        <p className="text-ink/80 whitespace-pre-wrap break-words font-medium">{user.bio}</p>
                     </div>
                 )}
 
@@ -1188,7 +1188,7 @@ const Feed = () => {
             <section className="grain border-b-2 border-ink">
                 <div className="max-w-6xl mx-auto px-4 md:px-8 py-12 md:py-16 text-center">
                     <span className="inline-block bg-ink text-paper font-display text-[10px] uppercase tracking-[0.2em] px-3 py-1.5">Маркетплейс услуг</span>
-                    <h1 className="font-display font-extrabold uppercase leading-[0.95] tracking-tight text-[72px] sm:text-[104px] md:text-[136px] mt-6">
+                    <h1 className="font-display font-extrabold uppercase leading-[0.95] tracking-tight text-[56px] sm:text-[96px] md:text-[136px] mt-6">
                         ДЕЛО<span className="text-signal">.</span>
                     </h1>
                     <p className="mt-5 text-ink/70 font-semibold max-w-md mx-auto">
@@ -1199,7 +1199,7 @@ const Feed = () => {
                         <input
                             type="text"
                             placeholder="Что нужно сделать?"
-                            className="flex-1 border-2 border-r-0 border-ink bg-white p-3 md:p-4 font-medium outline-none focus:ring-2 focus:ring-signal"
+                            className="flex-1 min-w-0 border-2 border-r-0 border-ink bg-white p-3 md:p-4 font-medium outline-none focus:ring-2 focus:ring-signal"
                             value={searchInput}
                             onChange={(e) => setSearchInput(e.target.value)}
                         />
@@ -1255,9 +1255,9 @@ const Feed = () => {
                         />
                         <span className="font-extrabold text-sm whitespace-nowrap">🌐 Только удалённые</span>
                     </label>
-                    <div className="flex gap-3 items-stretch">
+                    <div className="flex gap-3 items-stretch flex-wrap">
                         <select
-                            className="h-[50px] border-2 border-ink bg-white px-3 font-semibold outline-none focus:ring-2 focus:ring-signal cursor-pointer"
+                            className="h-[50px] flex-1 min-w-[150px] lg:flex-none border-2 border-ink bg-white px-3 font-semibold outline-none focus:ring-2 focus:ring-signal cursor-pointer"
                             value={sortBy}
                             onChange={(e) => setSortBy(e.target.value)}
                         >
@@ -1269,13 +1269,13 @@ const Feed = () => {
                         </select>
                         <button
                             onClick={() => setViewMode('list')}
-                            className={`h-[50px] px-4 border-2 border-ink font-display text-[11px] uppercase tracking-wider transition hover:hard-shadow-sm ${viewMode === 'list' ? 'bg-ink text-paper' : 'bg-white text-ink'}`}
+                            className={`h-[50px] flex-1 lg:flex-none px-4 border-2 border-ink font-display text-[11px] uppercase tracking-wider transition hover:hard-shadow-sm ${viewMode === 'list' ? 'bg-ink text-paper' : 'bg-white text-ink'}`}
                         >
                             📋 Список
                         </button>
                         <button
                             onClick={() => setViewMode('map')}
-                            className={`h-[50px] px-4 border-2 border-ink font-display text-[11px] uppercase tracking-wider transition hover:hard-shadow-sm ${viewMode === 'map' ? 'bg-ink text-paper' : 'bg-white text-ink'}`}
+                            className={`h-[50px] flex-1 lg:flex-none px-4 border-2 border-ink font-display text-[11px] uppercase tracking-wider transition hover:hard-shadow-sm ${viewMode === 'map' ? 'bg-ink text-paper' : 'bg-white text-ink'}`}
                         >
                             🗺 Карта
                         </button>
@@ -1342,7 +1342,7 @@ const Feed = () => {
                                         <span className="bg-ink text-paper text-[10px] font-extrabold uppercase tracking-widest px-2 py-1 truncate">{getCategoryLabel(t.category)}</span>
                                         {getStatusBadge(t.status)}
                                     </div>
-                                    <h3 className="font-extrabold text-lg leading-snug mt-3">
+                                    <h3 className="font-extrabold text-lg leading-snug mt-3 break-words">
                                         <Link to={`/task/${t.id}`} className="hover:text-signal transition">{t.title}</Link>
                                     </h3>
                                     <div className="flex gap-4 mt-2 text-[11px] font-extrabold uppercase tracking-wide text-ink/50 flex-wrap">
@@ -1355,7 +1355,7 @@ const Feed = () => {
                                             <span>📅 До {new Date(t.deadline).toLocaleDateString('ru-RU')}</span>
                                         )}
                                     </div>
-                                    <p className="text-sm text-ink/70 mt-3 mb-4 whitespace-pre-wrap line-clamp-3 flex-grow">{t.description}</p>
+                                    <p className="text-sm text-ink/70 mt-3 mb-4 whitespace-pre-wrap break-words line-clamp-3 flex-grow">{t.description}</p>
 
                                     {/* Task images */}
  {t.images && (() => { try { return JSON.parse(t.images); } catch { return []; } })().length > 0 && (() => {
@@ -1541,7 +1541,7 @@ const Feed = () => {
                                     type="text"
                                     value={newMessage}
                                     onChange={e => setNewMessage(e.target.value)}
-                                    className={`${inputCls} flex-grow`}
+                                    className={`${inputCls} flex-grow min-w-0`}
                                     placeholder="Введите сообщение..."
                                 />
                                 <button type="submit" disabled={!newMessage.trim()} className="bg-ink hover:bg-signal disabled:bg-ink/30 text-paper font-bold px-6 border-2 border-ink transition">
