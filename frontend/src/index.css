@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@theme {
+    --font-display: "Unbounded", "Arial Black", sans-serif;
+    --font-sans: "Manrope", system-ui, sans-serif;
+
+    --color-ink: #141414;
+    --color-paper: #F4F2ED;
+    --color-paper-dark: #E9E6DF;
+    --color-signal: #E8442E;
+}
+
+@utility hard-shadow {
+    box-shadow: 5px 5px 0 0 var(--color-ink);
+}
+
+@utility hard-shadow-sm {
+    box-shadow: 3px 3px 0 0 var(--color-ink);
+}
+
+@utility hard-shadow-lg {
+    box-shadow: 8px 8px 0 0 var(--color-ink);
+}
+
+/* Paper-grain texture, echoing the brand artwork's left panel */
+@utility grain {
+    background-color: var(--color-paper-dark);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.16'/%3E%3C/svg%3E");
+}
+
+body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+}
+
+::selection {
+    background-color: var(--color-signal);
+    color: #fff;
+}

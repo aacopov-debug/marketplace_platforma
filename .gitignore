@@ -1,0 +1,32 @@
+# Зависимости
+node_modules/
+.pnpm-store/
+
+# Сборка
+frontend/dist/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Базы данных и загруженные файлы (не для GitHub)
+*.db
+backend/uploads/
+
+# Секреты и локальное
+.env
+.env.*
+*.log
+.claude/
+.DS_Store
+
+# Скриншоты и рабочие файлы
+*.png
+!frontend/src/assets/*.jpg
+
+# Старые сборки и бэкапы
+frontend/src/dist/
+*_backup_old*
+backend/main_backup.py
