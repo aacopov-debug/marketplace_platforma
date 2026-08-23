@@ -418,7 +418,7 @@ def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
 
 @app.post("/tasks/")
 def create_task(task: TaskCreate, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    payload = decode_token_or_401(token)
     if payload.get("role") != "customer":
         raise HTTPException(403, "Только для заказчиков")
 
@@ -561,7 +561,7 @@ def get_user_reviews(user_id: int, db: Session = Depends(get_db)):
 
 @app.get("/users/me")
 def get_profile(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    payload = decode_token_or_401(token)
     user = db.query(User).filter(User.id == int(payload.get("sub"))).first()
     if not user:
         raise HTTPException(404, "Пользователь не найден")
@@ -599,7 +599,7 @@ def get_profile(token: str = Depends(oauth2_scheme), db: Session = Depends(get_d
 
 @app.put("/users/me")
 def update_profile(profile: ProfileUpdate, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    payload = decode_token_or_401(token)
     user = db.query(User).filter(User.id == int(payload.get("sub"))).first()
     if profile.name is not None:
         user.name = profile.name
@@ -620,7 +620,7 @@ def update_profile(profile: ProfileUpdate, token: str = Depends(oauth2_scheme), 
 
 @app.post("/wallet/deposit")
 def deposit_funds(req: DepositRequest, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    payload = decode_token_or_401(token)
     user = db.query(User).filter(User.id == int(payload.get("sub"))).first()
     if not user:
         raise HTTPException(404, "Пользователь не найден")
@@ -658,7 +658,7 @@ def buy_package(req: BuyPackageRequest, token: str = Depends(oauth2_scheme), db:
     if not pkg:
         raise HTTPException(404, "Пакет не найден")
 
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    payload = decode_token_or_401(token)
     user = db.query(User).filter(User.id == int(payload.get("sub"))).first()
     if user.role != UserRole.specialist:
         raise HTTPException(403, "Пакеты доступны только специалистам")
@@ -692,7 +692,7 @@ def payments_status():
 @app.post("/payments/create")
 def create_payment(req: DepositRequest, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """Create a YooKassa payment and return the confirmation URL to redirect the user."""
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    payload = decode_token_or_401(token)
     user_id = int(payload.get("sub"))
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
@@ -724,7 +724,7 @@ def confirm_payment(payment_id: str, token: str = Depends(oauth2_scheme), db: Se
     Called by frontend after user returns from YooKassa.
     Idempotent: won't double-credit thanks to transaction record check.
     """
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    payload = decode_token_or_401(token)
     user_id = int(payload.get("sub"))
 
     status_result = payments.get_payment_status(payment_id)
@@ -756,7 +756,7 @@ def confirm_payment(payment_id: str, token: str = Depends(oauth2_scheme), db: Se
 
 @app.put("/tasks/{task_id}/assign")
 def assign_task(task_id: int, specialist_id: int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    payload = decode_token_or_401(token)
     customer_id = int(payload.get("sub"))
     customer = db.query(User).filter(User.id == customer_id).first()
     task = db.query(Task).filter(Task.id == task_id, Task.customer_id == customer_id).first()
@@ -793,7 +793,7 @@ def assign_task(task_id: int, specialist_id: int, token: str = Depends(oauth2_sc
 
 @app.put("/tasks/{task_id}/complete")
 def complete_task(task_id: int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    payload = decode_token_or_401(token)
     customer_id = int(payload.get("sub"))
     task = db.query(Task).filter(Task.id == task_id, Task.customer_id == customer_id).first()
     if not task:
@@ -823,7 +823,7 @@ def complete_task(task_id: int, token: str = Depends(oauth2_scheme), db: Session
 
 @app.post("/tasks/{task_id}/responses")
 def create_response(task_id: int, response: ResponseCreate, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    payload = decode_token_or_401(token)
     if payload.get("role") != "specialist":
         raise HTTPException(403, "Только для специалистов")
     specialist_id = int(payload.get("sub"))
@@ -861,7 +861,7 @@ def create_response(task_id: int, response: ResponseCreate, token: str = Depends
 
 @app.get("/tasks/{task_id}/responses")
 def get_task_responses(task_id: int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    payload = decode_token_or_401(token)
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(404, "Заказ не найден")
@@ -902,7 +902,7 @@ def get_task_responses(task_id: int, token: str = Depends(oauth2_scheme), db: Se
 
 @app.post("/tasks/{task_id}/review")
 def create_review(task_id: int, review: ReviewCreate, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    payload = decode_token_or_401(token)
     user_id = int(payload.get("sub"))
     role = payload.get("role")
 
@@ -957,7 +957,7 @@ async def websocket_endpoint(websocket: WebSocket, task_id: int, db: Session = D
         return
 
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = decode_token_or_401(token)
     except:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
@@ -990,7 +990,7 @@ async def websocket_endpoint(websocket: WebSocket, task_id: int, db: Session = D
 
 @app.get("/tasks/{task_id}/messages")
 def get_messages(task_id: int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    payload = decode_token_or_401(token)
     user_id = int(payload.get("sub"))
     role = payload.get("role")
 
@@ -1019,7 +1019,7 @@ def get_messages(task_id: int, token: str = Depends(oauth2_scheme), db: Session 
 
 @app.post("/tasks/{task_id}/messages")
 async def post_message(task_id: int, message: MessageCreate, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    payload = decode_token_or_401(token)
     user_id = int(payload.get("sub"))
     role = payload.get("role")
 
@@ -1089,7 +1089,7 @@ def get_file(file_id: int, db: Session = Depends(get_db)):
 @app.post("/upload/avatar")
 async def upload_avatar(request: Request, file: UploadFile = File(...), token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """Upload user avatar"""
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    payload = decode_token_or_401(token)
     user_id = int(payload.get("sub"))
 
     user = db.query(User).filter(User.id == user_id).first()
@@ -1103,7 +1103,7 @@ async def upload_avatar(request: Request, file: UploadFile = File(...), token: s
 @app.post("/upload/portfolio")
 async def upload_portfolio(request: Request, file: UploadFile = File(...), token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """Upload portfolio image for specialist"""
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    payload = decode_token_or_401(token)
     user_id = int(payload.get("sub"))
 
     user = db.query(User).filter(User.id == user_id).first()
@@ -1125,7 +1125,7 @@ async def upload_portfolio(request: Request, file: UploadFile = File(...), token
 @app.post("/upload/task-image")
 async def upload_task_image(request: Request, file: UploadFile = File(...), token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """Upload task image (returns URL to include in task creation)"""
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    payload = decode_token_or_401(token)
 
     file_id = save_file_to_db(db, file)
     return {"message": "Task image uploaded", "url": public_file_url(request, f"files/{file_id}")}
@@ -1161,7 +1161,7 @@ def get_unread_count(token: str = Depends(oauth2_scheme), db: Session = Depends(
 @app.put("/notifications/read-all")
 def mark_all_read(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """Mark all notifications as read"""
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    payload = decode_token_or_401(token)
     user_id = int(payload.get("sub"))
     db.query(Notification).filter(
         Notification.user_id == user_id,
@@ -1173,7 +1173,7 @@ def mark_all_read(token: str = Depends(oauth2_scheme), db: Session = Depends(get
 @app.put("/notifications/{notification_id}/read")
 def mark_read(notification_id: int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """Mark single notification as read"""
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    payload = decode_token_or_401(token)
     user_id = int(payload.get("sub"))
     notif = db.query(Notification).filter(
         Notification.id == notification_id,
