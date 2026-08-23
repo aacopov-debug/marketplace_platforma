@@ -7,3 +7,4 @@ pydantic[email]
 python-multipart
 websockets
 requests
+psycopg2-binary

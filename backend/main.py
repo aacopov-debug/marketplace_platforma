@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect, UploadFile, File, Request
+from fastapi.responses import Response as FastResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -7,21 +8,27 @@ import asyncio
 from enum import Enum as PyEnum
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, Text, Enum as SqlaEnum
+from sqlalchemy import LargeBinary as SqlaLargeBinary
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 import os
 import bcrypt
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from typing import Optional, List
-from file_utils import save_upload_file, delete_file, UPLOAD_DIR
+from file_utils import save_upload_file, delete_file, UPLOAD_DIR, validate_image
 from geocoding import geocode_address
 import payments
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "marketplace_super_secret")
 ALGORITHM = "HS256"
 DB_URL = os.environ.get("DATABASE_URL", "sqlite:///./marketplace_v3.db")
+# Render/Heroku отдают postgres:// — SQLAlchemy 2 требует явный драйвер
+if DB_URL.startswith("postgres://"):
+    DB_URL = DB_URL.replace("postgres://", "postgresql+psycopg2://", 1)
+elif DB_URL.startswith("postgresql://"):
+    DB_URL = DB_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
 connect_args = {"check_same_thread": False} if "sqlite" in DB_URL else {}
-engine = create_engine(DB_URL, connect_args=connect_args)
+engine = create_engine(DB_URL, connect_args=connect_args, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -140,6 +147,15 @@ class Review(Base):
     specialist_id = Column(Integer, index=True)
     rating = Column(Integer)
     comment = Column(String, nullable=True)
+
+class StoredFile(Base):
+    """Файлы (аватары, портфолио, фото заказов) хранятся в базе — переживают перезапуск контейнера"""
+    __tablename__ = "stored_files"
+    id = Column(Integer, primary_key=True, index=True)
+    filename = Column(String)
+    content_type = Column(String, default="image/jpeg")
+    data = Column(SqlaLargeBinary)
+    created_at = Column(String, default=lambda: datetime.utcnow().isoformat())
 
 Base.metadata.create_all(bind=engine)
 
@@ -822,20 +838,35 @@ def public_file_url(request: Request, file_path: str) -> str:
     """Полный URL файла по фактическому адресу бэкенда (работает и локально, и на Render)"""
     return f"{str(request.base_url).rstrip('/')}/{file_path}"
 
+def save_file_to_db(db: Session, file: UploadFile) -> int:
+    """Сохраняет изображение в базу и возвращает его id (файлы переживают перезапуск контейнера)"""
+    validate_image(file)
+    data = file.file.read()
+    stored = StoredFile(
+        filename=file.filename or "image",
+        content_type=file.content_type or "image/jpeg",
+        data=data
+    )
+    db.add(stored)
+    db.commit()
+    return stored.id
+
+@app.get("/files/{file_id}")
+def get_file(file_id: int, db: Session = Depends(get_db)):
+    stored = db.query(StoredFile).filter(StoredFile.id == file_id).first()
+    if not stored:
+        raise HTTPException(404, "Файл не найден")
+    return FastResponse(content=stored.data, media_type=stored.content_type)
+
 @app.post("/upload/avatar")
 async def upload_avatar(request: Request, file: UploadFile = File(...), token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """Upload user avatar"""
     payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     user_id = int(payload.get("sub"))
 
-    # Delete old avatar if exists
     user = db.query(User).filter(User.id == user_id).first()
-    if user and user.avatar:
-        delete_file(user.avatar)
-
-    # Save new avatar
-    file_path = save_upload_file(file, "avatars")
-    url = public_file_url(request, file_path)
+    file_id = save_file_to_db(db, file)
+    url = public_file_url(request, f"files/{file_id}")
     user.avatar = url
     db.commit()
 
@@ -851,9 +882,8 @@ async def upload_portfolio(request: Request, file: UploadFile = File(...), token
     if user.role != UserRole.specialist:
         raise HTTPException(403, "Only specialists can upload portfolio")
 
-    # Save image
-    file_path = save_upload_file(file, "portfolio")
-    url = public_file_url(request, file_path)
+    file_id = save_file_to_db(db, file)
+    url = public_file_url(request, f"files/{file_id}")
 
     # Add to portfolio JSON array
     import json as json_lib
@@ -865,14 +895,12 @@ async def upload_portfolio(request: Request, file: UploadFile = File(...), token
     return {"message": "Portfolio image uploaded", "url": url}
 
 @app.post("/upload/task-image")
-async def upload_task_image(request: Request, file: UploadFile = File(...), token: str = Depends(oauth2_scheme)):
+async def upload_task_image(request: Request, file: UploadFile = File(...), token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """Upload task image (returns URL to include in task creation)"""
     payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
 
-    # Save image
-    file_path = save_upload_file(file, "tasks")
-
-    return {"message": "Task image uploaded", "url": public_file_url(request, file_path)}
+    file_id = save_file_to_db(db, file)
+    return {"message": "Task image uploaded", "url": public_file_url(request, f"files/{file_id}")}
 
 def decode_token_or_401(token: str):
     """Декодирует JWT; при истёкшем/невалидном токене возвращает 401 вместо 500"""

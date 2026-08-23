@@ -1454,7 +1454,9 @@ const Feed = () => {
                                             <div className="flex justify-between items-start mb-2 gap-3 flex-wrap">
                                                 <div>
                                                     <h3 className="font-extrabold text-lg flex items-center gap-2 flex-wrap">
-                                                        {r.specialist_name}
+                                                        <Link to={`/user/${r.specialist_id}`} className="hover:text-signal underline decoration-2 decoration-transparent hover:decoration-signal transition">
+                                                            {r.specialist_name || `Специалист №${r.specialist_id}`}
+                                                        </Link>
                                                         {r.specialist_verified && (
                                                             <span className="text-signal" title="Проверенный">✓</span>
                                                         )}
