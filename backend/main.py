@@ -496,6 +496,28 @@ def get_task_detail(task_id: int, db: Session = Depends(get_db)):
         "responses_count": responses_count
     }
 
+class TaskImagesDeleteRequest(BaseModel):
+    urls_to_delete: List[str]
+
+@app.delete("/tasks/{task_id}/images")
+def delete_task_images(task_id: int, req: TaskImagesDeleteRequest, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """Удаление фото из заказа (только его автор)"""
+    payload = decode_token_or_401(token)
+    user_id = int(payload.get("sub"))
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(404, "Заказ не найден")
+    if task.customer_id != user_id:
+        raise HTTPException(403, "Удалять фото может только автор заказа")
+    try:
+        imgs = json.loads(task.images) if task.images else []
+    except Exception:
+        imgs = []
+    new_imgs = [u for u in imgs if u not in req.urls_to_delete]
+    task.images = json.dumps(new_imgs) if new_imgs else None
+    db.commit()
+    return {"message": "Фото удалено", "images": new_imgs}
+
 @app.get("/users/{user_id}/public")
 def get_public_profile(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()

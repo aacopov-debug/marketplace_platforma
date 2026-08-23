@@ -304,10 +304,9 @@ const CreateTaskModal = ({ onClose, onTaskCreated }) => {
                                         <button
                                             type="button"
                                             onClick={() => removeImage(idx)}
-                                            className="absolute top-1 right-1 bg-signal text-white w-6 h-6 flex items-center justify-center font-bold opacity-0 group-hover:opacity-100 transition"
-                                        >
-                                            ×
-                                        </button>
+                                            title="Удалить фото"
+                                            className="absolute -top-2 -right-2 bg-signal text-white w-7 h-7 border-2 border-ink font-extrabold text-sm flex items-center justify-center transition hover:hard-shadow-sm"
+                                        >×</button>
                                     </div>
                                 ))}
                             </div>
@@ -753,6 +752,19 @@ const TaskPage = () => {
 
     const parseImages = (imgs) => { try { return imgs ? JSON.parse(imgs) : []; } catch { return []; } };
     const images = task ? parseImages(task.images) : [];
+    const isOwner = token && role === 'customer' && task && task.customer_id === parseInt(jwtDecode(token).sub);
+
+    const handleDeleteImage = async (url) => {
+        try {
+            await axios.delete(`${API_URL}/tasks/${task.id}/images`,
+                { data: { urls_to_delete: [url] }, headers: { Authorization: `Bearer ${token}` } }
+            );
+            toast.success('Фото удалено');
+            fetchTask();
+        } catch (err) {
+            toast.error(err.response?.data?.detail || 'Не удалось удалить фото');
+        }
+    };
 
     if (loading) {
         return (
@@ -813,13 +825,21 @@ const TaskPage = () => {
                     {images.length > 0 && (
                         <div className="grid grid-cols-3 gap-3 mt-6">
                             {images.map((img, idx) => (
-                                <img
-                                    key={idx}
-                                    src={img}
-                                    alt={`Фото ${idx + 1}`}
-                                    className="w-full h-28 object-cover border-2 border-ink cursor-pointer transition hover:hard-shadow-sm"
-                                    onClick={() => setLightbox({ images, index: idx })}
-                                />
+                                <div key={idx} className="relative">
+                                    <img
+                                        src={img}
+                                        alt={`Фото ${idx + 1}`}
+                                        className="w-full h-28 object-cover border-2 border-ink cursor-pointer transition hover:hard-shadow-sm"
+                                        onClick={() => setLightbox({ images, index: idx })}
+                                    />
+                                    {isOwner && (
+                                        <button
+                                            onClick={() => handleDeleteImage(img)}
+                                            title="Удалить фото"
+                                            className="absolute -top-2 -right-2 bg-signal text-white w-7 h-7 border-2 border-ink font-extrabold text-sm flex items-center justify-center transition hover:hard-shadow-sm"
+                                        >×</button>
+                                    )}
+                                </div>
                             ))}
                         </div>
                     )}
