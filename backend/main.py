@@ -75,6 +75,7 @@ class User(Base):
     portfolio = Column(Text, nullable=True)  # JSON string with portfolio items
     skills = Column(Text, nullable=True)  # JSON string with skills array
     verified = Column(Boolean, default=False)
+    last_seen = Column(String, nullable=True)  # ISO-время последней активности
 
 class Transaction(Base):
     __tablename__ = "transactions"
@@ -144,9 +145,19 @@ class Review(Base):
     id = Column(Integer, primary_key=True, index=True)
     task_id = Column(Integer, index=True)
     reviewer_id = Column(Integer)
-    specialist_id = Column(Integer, index=True)
+    specialist_id = Column(Integer, index=True)  # тот, КТОМУ поставили оценку (специалист или заказчик)
     rating = Column(Integer)
     comment = Column(String, nullable=True)
+    target = Column(String, default="specialist")  # specialist | customer — кому отзыв
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True)
+    token = Column(String, unique=True, index=True)
+    expires_at = Column(String)
+    used = Column(Boolean, default=False)
+    created_at = Column(String, default=lambda: datetime.utcnow().isoformat())
 
 class StoredFile(Base):
     """Файлы (аватары, портфолио, фото заказов) хранятся в базе — переживают перезапуск контейнера"""
@@ -158,6 +169,23 @@ class StoredFile(Base):
     created_at = Column(String, default=lambda: datetime.utcnow().isoformat())
 
 Base.metadata.create_all(bind=engine)
+
+def _run_column_migrations():
+    """Добавляет новые колонки в уже существующие таблицы (create_all их не трогает)"""
+    from sqlalchemy import text
+    migrations = [
+        "ALTER TABLE users ADD COLUMN last_seen VARCHAR",
+        "ALTER TABLE reviews ADD COLUMN target VARCHAR DEFAULT 'specialist'",
+    ]
+    with engine.connect() as conn:
+        for m in migrations:
+            try:
+                conn.execute(text(m))
+                conn.commit()
+            except Exception:
+                conn.rollback()  # колонка уже существует
+
+_run_column_migrations()
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -174,6 +202,40 @@ def get_db():
 
 app = FastAPI(title="ProfiClone API - YouDo Edition")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+# --- Онлайн-статусы: обновляем last_seen не чаще раза в минуту ---
+_seen_cache: dict[int, datetime] = {}
+
+@app.middleware("http")
+async def track_last_seen(request, call_next):
+    response = await call_next(request)
+    auth = request.headers.get("authorization", "")
+    if auth.startswith("Bearer "):
+        try:
+            payload = jwt.decode(auth[7:], SECRET_KEY, algorithms=[ALGORITHM])
+            uid = int(payload.get("sub"))
+            now = datetime.utcnow()
+            last = _seen_cache.get(uid)
+            if last is None or (now - last).total_seconds() > 60:
+                db = SessionLocal()
+                try:
+                    db.query(User).filter(User.id == uid).update({"last_seen": now.isoformat()})
+                    db.commit()
+                finally:
+                    db.close()
+                _seen_cache[uid] = now
+        except Exception:
+            pass
+    return response
+
+def user_online(user) -> bool:
+    """Онлайн = была активность за последние 2 минуты"""
+    if not user.last_seen:
+        return False
+    try:
+        return (datetime.utcnow() - datetime.fromisoformat(user.last_seen)).total_seconds() < 120
+    except Exception:
+        return False
 
 # Mount uploads directory for serving images
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
@@ -284,6 +346,70 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
     token = jwt.encode({"sub": str(user.id), "role": user.role, "exp": datetime.utcnow() + timedelta(days=1)}, SECRET_KEY, algorithm=ALGORITHM)
     return {"access_token": token, "token_type": "bearer", "role": user.role}
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+def send_email(to: str, subject: str, body: str):
+    """Отправка письма через SMTP из переменных окружения"""
+    import smtplib
+    from email.mime.text import MIMEText
+    host = os.environ.get("SMTP_HOST")
+    user = os.environ.get("SMTP_USER")
+    password = os.environ.get("SMTP_PASS")
+    if not host or not user or not password:
+        raise HTTPException(503, "Почтовый сервис не настроен. Обратитесь к администратору.")
+    msg = MIMEText(body, "plain", "utf-8")
+    msg["Subject"] = subject
+    msg["From"] = os.environ.get("SMTP_FROM", user)
+    msg["To"] = to
+    port = int(os.environ.get("SMTP_PORT", "587"))
+    with smtplib.SMTP(host, port, timeout=20) as server:
+        server.starttls()
+        server.login(user, password)
+        server.send_message(msg)
+
+@app.post("/auth/forgot-password")
+def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == req.email).first()
+    # Не раскрываем существование аккаунта — всегда отвечаем успехом
+    if user:
+        import secrets as pysecrets
+        token = pysecrets.token_urlsafe(32)
+        reset = PasswordResetToken(
+            user_id=user.id,
+            token=token,
+            expires_at=(datetime.utcnow() + timedelta(hours=1)).isoformat()
+        )
+        db.add(reset)
+        db.commit()
+        frontend_url = os.environ.get("FRONTEND_URL", "https://delo-jhcy.onrender.com")
+        link = f"{frontend_url}/reset?token={token}"
+        send_email(
+            req.email,
+            "ДЕЛО — сброс пароля",
+            f"Здравствуйте!\n\nКто-то (надеемся, вы) запросил сброс пароля на маркетплейсе ДЕЛО.\n"
+            f"Ссылка действительна 1 час:\n\n{link}\n\n"
+            f"Если вы не запрашивали сброс — просто проигнорируйте это письмо."
+        )
+    return {"message": "Если аккаунт существует, письмо со ссылкой отправлено"}
+
+@app.post("/auth/reset-password")
+def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
+    reset = db.query(PasswordResetToken).filter(PasswordResetToken.token == req.token).first()
+    if not reset or reset.used:
+        raise HTTPException(400, "Ссылка недействительна или уже использована")
+    if datetime.fromisoformat(reset.expires_at) < datetime.utcnow():
+        raise HTTPException(400, "Ссылка истекла, запросите сброс заново")
+    user = db.query(User).filter(User.id == reset.user_id).first()
+    user.hashed_password = hash_password(req.new_password)
+    reset.used = True
+    db.commit()
+    return {"message": "Пароль обновлён, войдите с новым паролем"}
+
 @app.post("/tasks/")
 def create_task(task: TaskCreate, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -369,14 +495,22 @@ def get_public_profile(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(404, "Пользователь не найден")
+    # Отзывы ЧЕЛОВЕКУ: специалисту — про его работу, заказчику — про него как заказчика
+    review_target = "specialist" if user.role == UserRole.specialist else "customer"
     rating = None
-    reviews = db.query(Review).filter(Review.specialist_id == user.id).all()
+    reviews = db.query(Review).filter(Review.specialist_id == user.id, Review.target == review_target).all()
     if reviews:
         rating = round(sum(r.rating for r in reviews) / len(reviews), 1)
-    completed_tasks = db.query(Task).filter(
-        Task.executor_id == user.id,
-        Task.status == TaskStatus.completed
-    ).count()
+    if user.role == UserRole.specialist:
+        completed_tasks = db.query(Task).filter(
+            Task.executor_id == user.id,
+            Task.status == TaskStatus.completed
+        ).count()
+    else:
+        completed_tasks = db.query(Task).filter(
+            Task.customer_id == user.id,
+            Task.status == TaskStatus.completed
+        ).count()
     return {
         "id": user.id,
         "role": user.role,
@@ -388,21 +522,31 @@ def get_public_profile(user_id: int, db: Session = Depends(get_db)):
         "portfolio": user.portfolio,
         "skills": user.skills,
         "verified": user.verified,
-        "completed_tasks": completed_tasks
+        "completed_tasks": completed_tasks,
+        "online": user_online(user),
+        "last_seen": user.last_seen
     }
 
 @app.get("/users/{user_id}/reviews")
 def get_user_reviews(user_id: int, db: Session = Depends(get_db)):
-    reviews = db.query(Review).filter(Review.specialist_id == user_id).order_by(Review.id.desc()).all()
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "Пользователь не найден")
+    review_target = "specialist" if user.role == UserRole.specialist else "customer"
+    reviews = db.query(Review).filter(
+        Review.specialist_id == user_id, Review.target == review_target
+    ).order_by(Review.id.desc()).all()
     result = []
     for r in reviews:
         reviewer = db.query(User).filter(User.id == r.reviewer_id).first()
         task = db.query(Task).filter(Task.id == r.task_id).first()
+        reviewer_role = "Специалист" if (reviewer and reviewer.role == UserRole.specialist) else "Заказчик"
         result.append({
             "id": r.id,
             "rating": r.rating,
             "comment": r.comment,
-            "reviewer_name": reviewer.name if reviewer and reviewer.name else "Заказчик",
+            "reviewer_name": reviewer.name if reviewer and reviewer.name else reviewer_role,
+            "reviewer_role": reviewer_role,
             "task_title": task.title if task else None,
             "task_id": r.task_id
         })
@@ -676,6 +820,7 @@ def get_task_responses(task_id: int, token: str = Depends(oauth2_scheme), db: Se
             "specialist_completed_tasks": completed_tasks,
             "specialist_verified": spec.verified if spec else False,
             "specialist_city": spec.city if spec else None,
+            "specialist_online": user_online(spec) if spec else False,
             "proposed_price": r.proposed_price,
             "estimated_days": r.estimated_days
         })
@@ -684,28 +829,37 @@ def get_task_responses(task_id: int, token: str = Depends(oauth2_scheme), db: Se
 @app.post("/tasks/{task_id}/review")
 def create_review(task_id: int, review: ReviewCreate, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    customer_id = int(payload.get("sub"))
+    user_id = int(payload.get("sub"))
+    role = payload.get("role")
 
-    task = db.query(Task).filter(Task.id == task_id, Task.customer_id == customer_id).first()
+    task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
-        raise HTTPException(404, "Заказ не найден или вы не его автор")
+        raise HTTPException(404, "Заказ не найден")
 
     if task.status != TaskStatus.completed:
         raise HTTPException(400, "Можно оставлять отзывы только на завершенные заказы")
 
-    if not task.executor_id:
-        raise HTTPException(400, "У заказа нет исполнителя")
+    # Взаимные отзывы: заказчик оценивает исполнителя, исполнитель — заказчика
+    if role == "customer" and task.customer_id == user_id:
+        if not task.executor_id:
+            raise HTTPException(400, "У заказа нет исполнителя")
+        reviewee_id, target = task.executor_id, "specialist"
+    elif role == "specialist" and task.executor_id == user_id:
+        reviewee_id, target = task.customer_id, "customer"
+    else:
+        raise HTTPException(403, "Отзыв доступен только участникам заказа")
 
-    existing = db.query(Review).filter(Review.task_id == task_id).first()
+    existing = db.query(Review).filter(Review.task_id == task_id, Review.reviewer_id == user_id).first()
     if existing:
         raise HTTPException(400, "Вы уже оставили отзыв на этот заказ")
 
     new_review = Review(
         task_id=task_id,
-        reviewer_id=customer_id,
-        specialist_id=task.executor_id,
+        reviewer_id=user_id,
+        specialist_id=reviewee_id,
         rating=review.rating,
-        comment=review.comment
+        comment=review.comment,
+        target=target
     )
     db.add(new_review)
     db.commit()

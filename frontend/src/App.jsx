@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { BrowserRouter, Routes, Route, Link, useParams } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link, useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import { jwtDecode } from 'jwt-decode';
 import { AvatarUploader, PortfolioUploader } from './components/ImageUploader';
@@ -61,6 +61,20 @@ const AuthModal = ({ onClose }) => {
     const [name, setName] = useState('');
     const [role, setRole] = useState('customer');
     const [error, setError] = useState('');
+    const [forgotMode, setForgotMode] = useState(false);
+    const [forgotEmail, setForgotEmail] = useState('');
+    const [forgotMsg, setForgotMsg] = useState('');
+
+    const handleForgot = async (e) => {
+        e.preventDefault();
+        setForgotMsg('');
+        try {
+            const res = await axios.post(`${API_URL}/auth/forgot-password`, { email: forgotEmail });
+            setForgotMsg(res.data.message);
+        } catch (err) {
+            toast.error(err.response?.data?.detail || 'Ошибка отправки');
+        }
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -87,9 +101,20 @@ const AuthModal = ({ onClose }) => {
     return (
         <div className={modalOverlay}>
             <div ref={panelRef} tabIndex={-1} className={`${modalPanel} w-full max-w-sm p-6 md:p-8 outline-none focus:ring-2 focus:ring-signal`}>
-                <h2 className="font-display font-bold uppercase text-xl text-center">{isLogin ? 'Вход' : 'Регистрация'}</h2>
-                {error && <div className="mt-4 border-2 border-signal bg-signal/10 text-signal p-3 font-bold text-sm">{error}</div>}
+                <h2 className="font-display font-bold uppercase text-xl text-center">{forgotMode ? 'Сброс пароля' : isLogin ? 'Вход' : 'Регистрация'}</h2>
+                {error && !forgotMode && <div className="mt-4 border-2 border-signal bg-signal/10 text-signal p-3 font-bold text-sm">{error}</div>}
 
+                {forgotMode ? (
+                    <form onSubmit={handleForgot} className="flex flex-col gap-4 mt-6">
+                        <p className="text-sm font-semibold text-ink/70">Введите e-mail — пришлём ссылку для сброса пароля (действует 1 час).</p>
+                        <input type="email" placeholder="Email" required value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} className={inputCls} />
+                        <button type="submit" className={`${btnPrimary} w-full mt-2`}>Отправить ссылку</button>
+                        {forgotMsg && <div className="border-2 border-ink bg-paper-dark p-3 font-bold text-sm">{forgotMsg}</div>}
+                        <button type="button" onClick={() => { setForgotMode(false); setForgotMsg(''); }} className="text-signal font-extrabold text-xs uppercase tracking-wider hover:underline underline-offset-4">
+                            ← Вернуться ко входу
+                        </button>
+                    </form>
+                ) : (
                 <form onSubmit={handleSubmit} className="flex flex-col gap-4 mt-6">
                     {!isLogin && (
                         <input type="text" placeholder="Имя (как вас называть)" value={name} onChange={e => setName(e.target.value)} className={inputCls} />
@@ -111,7 +136,14 @@ const AuthModal = ({ onClose }) => {
                     <button type="button" onClick={() => { setIsLogin(!isLogin); setError(''); }} className="text-signal font-extrabold text-xs uppercase tracking-wider mt-2 hover:underline underline-offset-4">
                         {isLogin ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
                     </button>
+
+                    {isLogin && (
+                        <button type="button" onClick={() => { setForgotMode(true); setError(''); }} className="text-ink/50 hover:text-ink font-bold text-xs underline underline-offset-4 transition">
+                            Забыли пароль?
+                        </button>
+                    )}
                 </form>
+                )}
                 <button onClick={onClose} className="mt-6 text-ink/40 hover:text-ink font-extrabold text-xs uppercase tracking-widest w-full text-center transition">Закрыть</button>
             </div>
         </div>
@@ -868,6 +900,12 @@ const PublicProfilePage = () => {
                             {user.verified && <span className="text-signal" title="Проверенный">✓</span>}
                         </h1>
                         <div className="flex gap-2 mt-3 flex-wrap">
+                            {(user.online || user.last_seen) && (
+                                <span className={`text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-1 border-2 border-ink ${user.online ? 'bg-white' : 'bg-paper-dark text-ink/50'}`}>
+                                    <span className={`inline-block w-2 h-2 mr-1.5 ${user.online ? 'bg-[#3BA55D]' : 'bg-ink/30'}`}></span>
+                                    {user.online ? 'Онлайн' : 'Был(а) недавно'}
+                                </span>
+                            )}
                             <span className="bg-ink text-paper text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-1">
                                 {user.role === 'specialist' ? '🛠 Специалист' : '🤝 Заказчик'}
                             </span>
@@ -916,7 +954,7 @@ const PublicProfilePage = () => {
                             {reviews.map(r => (
                                 <div key={r.id} className="border-2 border-ink bg-paper-dark/50 p-4">
                                     <div className="flex justify-between items-center gap-3 flex-wrap">
-                                        <span className="font-extrabold">{r.reviewer_name}</span>
+                                        <span className="font-extrabold">{r.reviewer_name}{r.reviewer_role && <span className="text-[10px] font-extrabold uppercase tracking-wider text-ink/40 ml-2">{r.reviewer_role}</span>}</span>
                                         <span className="bg-ink text-paper text-xs font-extrabold px-2 py-0.5">{"★".repeat(r.rating)}</span>
                                     </div>
                                     {r.task_title && (
@@ -938,6 +976,54 @@ const PublicProfilePage = () => {
                     onNavigate={(i) => setLightbox({ ...lightbox, index: i })}
                 />
             )}
+        </div>
+    );
+};
+
+const ResetPasswordPage = () => {
+    const [params] = useSearchParams();
+    const navigate = useNavigate();
+    const toast = useToast();
+    const token = params.get('token');
+    const [pw1, setPw1] = useState('');
+    const [pw2, setPw2] = useState('');
+    const [busy, setBusy] = useState(false);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (pw1.length < 6) return toast.error('Пароль должен быть не короче 6 символов');
+        if (pw1 !== pw2) return toast.error('Пароли не совпадают');
+        setBusy(true);
+        try {
+            await axios.post(`${API_URL}/auth/reset-password`, { token, new_password: pw1 });
+            toast.success('Пароль обновлён! Войдите с новым паролем.');
+            navigate('/');
+        } catch (err) {
+            toast.error(err.response?.data?.detail || 'Ошибка');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <div className="max-w-md mx-auto px-4 py-16">
+            <div className="bg-paper border-2 border-ink hard-shadow p-8">
+                <h1 className="font-display font-bold uppercase text-xl text-center">Новый пароль</h1>
+                {!token ? (
+                    <>
+                        <p className="mt-4 text-ink/60 font-semibold text-sm text-center">Ссылка недействительна — в ней нет ключа сброса.</p>
+                        <Link to="/" className={`${btnGhost} w-full mt-6`}>На главную</Link>
+                    </>
+                ) : (
+                    <form onSubmit={handleSubmit} className="flex flex-col gap-4 mt-6">
+                        <input type="password" placeholder="Новый пароль" required value={pw1} onChange={e => setPw1(e.target.value)} className={inputCls} />
+                        <input type="password" placeholder="Повторите пароль" required value={pw2} onChange={e => setPw2(e.target.value)} className={inputCls} />
+                        <button type="submit" disabled={busy} className={`${btnPrimary} w-full mt-2 disabled:opacity-50`}>
+                            {busy ? 'Сохранение...' : 'Сохранить пароль'}
+                        </button>
+                    </form>
+                )}
+            </div>
         </div>
     );
 };
@@ -1392,7 +1478,13 @@ const Feed = () => {
                                                 {t.status === 'in_progress' && (
                                                     <button onClick={() => setChatTask(t)} className={btnSignal}>Перейти в чат</button>
                                                 )}
+                                                {t.status === 'completed' && (
+                                                    <button onClick={() => setReviewingTask(t)} className={btnGhost}>★ Отзыв о специалисте</button>
+                                                )}
                                             </div>
+                                        )}
+                                        {role === 'specialist' && t.status === 'completed' && t.executor_id === parseInt(jwtDecode(token).sub) && (
+                                            <button onClick={() => setReviewingTask(t)} className={btnGhost}>★ Отзыв о заказчике</button>
                                         )}
                                     </div>
                                 </article>
@@ -1455,6 +1547,7 @@ const Feed = () => {
                                                 <div>
                                                     <h3 className="font-extrabold text-lg flex items-center gap-2 flex-wrap">
                                                         <Link to={`/user/${r.specialist_id}`} className="hover:text-signal underline decoration-2 decoration-transparent hover:decoration-signal transition">
+                                                            {r.specialist_online && <span className="inline-block w-2.5 h-2.5 bg-[#3BA55D] mr-2 align-middle" title="Сейчас онлайн"></span>}
                                                             {r.specialist_name || `Специалист №${r.specialist_id}`}
                                                         </Link>
                                                         {r.specialist_verified && (
@@ -1560,8 +1653,8 @@ const Feed = () => {
                 {reviewingTask && (
                     <div className={modalOverlay}>
                         <div ref={reviewRef} tabIndex={-1} className={`${modalPanel} w-full max-w-md p-6 outline-none focus:ring-2 focus:ring-signal`}>
-                            <h2 className="font-display font-bold uppercase text-xl">Оцените исполнителя</h2>
-                            <p className="mt-3 text-ink/60 font-semibold">Заказ &laquo;{reviewingTask.title}&raquo; завершен. Как вам работа специалиста?</p>
+                            <h2 className="font-display font-bold uppercase text-xl">{role === 'customer' ? 'Оцените исполнителя' : 'Оцените заказчика'}</h2>
+                            <p className="mt-3 text-ink/60 font-semibold">Заказ &laquo;{reviewingTask.title}&raquo; завершен. {role === 'customer' ? 'Как вам работа специалиста?' : 'Как вам работа с этим заказчиком?'}</p>
 
                             <div className="my-6 flex gap-2 justify-center">
                                 {[1, 2, 3, 4, 5].map(star => (
@@ -1650,6 +1743,7 @@ export default function App() {
                         <Route path="/" element={<Feed />} />
                         <Route path="/task/:id" element={<TaskPage />} />
                         <Route path="/user/:id" element={<PublicProfilePage />} />
+                        <Route path="/reset" element={<ResetPasswordPage />} />
                         <Route path="/profile" element={isAuth ? <ProfilePage /> : (
                             <div className="max-w-xl mx-auto my-24 text-center px-4">
                                 <div className="font-display font-bold uppercase text-3xl">Только для своих</div>
