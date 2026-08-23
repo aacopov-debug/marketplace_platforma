@@ -180,7 +180,7 @@ def _run_column_migrations():
         "ALTER TABLE users ADD COLUMN last_seen VARCHAR",
         "ALTER TABLE reviews ADD COLUMN target VARCHAR DEFAULT 'specialist'",
         "ALTER TABLE users ADD COLUMN response_credits INTEGER DEFAULT 5",
-        "ALTER TABLE users ADD COLUMN is_pro BOOLEAN DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN is_pro BOOLEAN DEFAULT false",
         "ALTER TABLE users ADD COLUMN pro_until VARCHAR",
     ]
     with engine.connect() as conn:
