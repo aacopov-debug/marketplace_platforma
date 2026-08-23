@@ -76,6 +76,9 @@ class User(Base):
     skills = Column(Text, nullable=True)  # JSON string with skills array
     verified = Column(Boolean, default=False)
     last_seen = Column(String, nullable=True)  # ISO-время последней активности
+    response_credits = Column(Integer, default=5)  # оплаченные отклики (5 — стартовый бонус)
+    is_pro = Column(Boolean, default=False)  # PRO-подписка: безлимит откликов + приоритет
+    pro_until = Column(String, nullable=True)
 
 class Transaction(Base):
     __tablename__ = "transactions"
@@ -176,6 +179,9 @@ def _run_column_migrations():
     migrations = [
         "ALTER TABLE users ADD COLUMN last_seen VARCHAR",
         "ALTER TABLE reviews ADD COLUMN target VARCHAR DEFAULT 'specialist'",
+        "ALTER TABLE users ADD COLUMN response_credits INTEGER DEFAULT 5",
+        "ALTER TABLE users ADD COLUMN is_pro BOOLEAN DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN pro_until VARCHAR",
     ]
     with engine.connect() as conn:
         for m in migrations:
@@ -522,6 +528,7 @@ def get_public_profile(user_id: int, db: Session = Depends(get_db)):
         "portfolio": user.portfolio,
         "skills": user.skills,
         "verified": user.verified,
+        "is_pro": user.is_pro,
         "completed_tasks": completed_tasks,
         "online": user_online(user),
         "last_seen": user.last_seen
@@ -584,7 +591,10 @@ def get_profile(token: str = Depends(oauth2_scheme), db: Session = Depends(get_d
         "portfolio": user.portfolio,
         "skills": user.skills,
         "verified": user.verified,
-        "completed_tasks": completed_tasks
+        "completed_tasks": completed_tasks,
+        "response_credits": user.response_credits,
+        "is_pro": user.is_pro,
+        "pro_until": user.pro_until
     }
 
 @app.put("/users/me")
@@ -622,6 +632,57 @@ def deposit_funds(req: DepositRequest, token: str = Depends(oauth2_scheme), db: 
     db.add(tx)
     db.commit()
     return {"message": "Баланс пополнен", "new_balance": user.balance}
+
+# ---- Монетизация: пакеты откликов и PRO-подписка ----
+
+MONETIZATION_PACKAGES = {
+    "resp_10": {"type": "responses", "title": "10 откликов", "credits": 10, "price": 190},
+    "resp_50": {"type": "responses", "title": "50 откликов", "credits": 50, "price": 790},
+    "pro_1": {"type": "pro", "title": "PRO на 1 месяц", "days": 30, "price": 590},
+    "pro_3": {"type": "pro", "title": "PRO на 3 месяца", "days": 90, "price": 1490},
+    "pro_12": {"type": "pro", "title": "PRO на год", "days": 365, "price": 4900},
+}
+
+class BuyPackageRequest(BaseModel):
+    package_id: str
+
+@app.get("/monetization/packages")
+def get_packages():
+    return {"packages": [
+        {"id": pid, **pkg} for pid, pkg in MONETIZATION_PACKAGES.items()
+    ]}
+
+@app.post("/monetization/buy")
+def buy_package(req: BuyPackageRequest, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    pkg = MONETIZATION_PACKAGES.get(req.package_id)
+    if not pkg:
+        raise HTTPException(404, "Пакет не найден")
+
+    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    user = db.query(User).filter(User.id == int(payload.get("sub"))).first()
+    if user.role != UserRole.specialist:
+        raise HTTPException(403, "Пакеты доступны только специалистам")
+    if (user.balance or 0) < pkg["price"]:
+        raise HTTPException(400, f"Недостаточно средств: нужно {pkg['price']} ₽. Пополните баланс.")
+
+    user.balance -= pkg["price"]
+    tx = Transaction(user_id=user.id, amount=-pkg["price"], type=TransactionType.deposit)
+    db.add(tx)
+
+    if pkg["type"] == "responses":
+        user.response_credits = (user.response_credits or 0) + pkg["credits"]
+        msg = f"Пакет «{pkg['title']}» куплен! Откликов: {user.response_credits}"
+    else:
+        base = datetime.utcnow()
+        if user.pro_until and datetime.fromisoformat(user.pro_until) > base:
+            base = datetime.fromisoformat(user.pro_until)  # продление с текущей даты окончания
+        user.pro_until = (base + timedelta(days=pkg["days"])).isoformat()
+        user.is_pro = True
+        msg = f"PRO активирован до {user.pro_until[:10]}"
+
+    db.commit()
+    return {"message": msg, "balance": user.balance,
+            "response_credits": user.response_credits, "is_pro": user.is_pro, "pro_until": user.pro_until}
 
 @app.get("/payments/status")
 def payments_status():
@@ -765,9 +826,18 @@ def create_response(task_id: int, response: ResponseCreate, token: str = Depends
     payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     if payload.get("role") != "specialist":
         raise HTTPException(403, "Только для специалистов")
+    specialist_id = int(payload.get("sub"))
+    specialist = db.query(User).filter(User.id == specialist_id).first()
+
+    # Монетизация: PRO — безлимит, иначе списываем 1 отклик
+    if not specialist.is_pro:
+        if (specialist.response_credits or 0) <= 0:
+            raise HTTPException(402, "Отклики закончились. Купите пакет откликов или оформите PRO в профиле")
+        specialist.response_credits -= 1
+
     new_response = Response(
         task_id=task_id,
-        specialist_id=int(payload.get("sub")),
+        specialist_id=specialist_id,
         text=response.text,
         proposed_price=response.proposed_price,
         estimated_days=response.estimated_days
@@ -776,17 +846,18 @@ def create_response(task_id: int, response: ResponseCreate, token: str = Depends
 
     # Notify customer about new response
     task = db.query(Task).filter(Task.id == task_id).first()
-    specialist = db.query(User).filter(User.id == int(payload.get("sub"))).first()
     if task:
         db.add(Notification(
             user_id=task.customer_id,
             type="new_response",
             title="Новый отклик на заказ!",
-            text=f"{specialist.name or specialist.email} откликнулся на задачу \"{task.title}\"" + (f" — {response.proposed_price} ₽" if response.proposed_price else ""),
+            text=f"{'PRO ★ ' if specialist.is_pro else ''}{specialist.name or specialist.email} откликнулся на задачу \"{task.title}\"" + (f" — {response.proposed_price} ₽" if response.proposed_price else ""),
             task_id=task_id
         ))
     db.commit()
-    return {"message": "Отклик отправлен", "response_id": new_response.id}
+    if not specialist.is_pro:
+        db.commit()  # фиксируем списание отклика
+    return {"message": "Отклик отправлен", "credits_left": None if specialist.is_pro else specialist.response_credits}
 
 @app.get("/tasks/{task_id}/responses")
 def get_task_responses(task_id: int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
@@ -821,9 +892,12 @@ def get_task_responses(task_id: int, token: str = Depends(oauth2_scheme), db: Se
             "specialist_verified": spec.verified if spec else False,
             "specialist_city": spec.city if spec else None,
             "specialist_online": user_online(spec) if spec else False,
+            "specialist_pro": spec.is_pro if spec else False,
             "proposed_price": r.proposed_price,
             "estimated_days": r.estimated_days
         })
+    # PRO-исполнители — первыми в списке
+    result.sort(key=lambda x: (not x["specialist_pro"], -(x["specialist_rating"] or 0)))
     return result
 
 @app.post("/tasks/{task_id}/review")

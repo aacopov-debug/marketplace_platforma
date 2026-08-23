@@ -46,6 +46,10 @@ const modalPanel = "bg-paper border-2 border-ink hard-shadow-lg";
 const chipCls = (active) =>
     `border-2 border-ink px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-wide transition hover:hard-shadow-sm ${active ? 'bg-ink text-paper' : 'bg-white text-ink'}`;
 
+const ProBadge = () => (
+    <span className="inline-block bg-[#D4A017] text-ink text-[9px] font-extrabold uppercase tracking-widest px-1.5 py-0.5 border border-ink align-middle">PRO</span>
+);
+
 const getInitial = (name, email) => {
     const src = (name && name.trim()) || email || '?';
     return src.trim().charAt(0).toUpperCase();
@@ -362,6 +366,10 @@ const ProfilePage = () => {
     const [avatar, setAvatar] = useState('');
     const [portfolio, setPortfolio] = useState([]);
     const [paymentsConfigured, setPaymentsConfigured] = useState(false);
+    const [responseCredits, setResponseCredits] = useState(0);
+    const [isPro, setIsPro] = useState(false);
+    const [proUntil, setProUntil] = useState(null);
+    const [packages, setPackages] = useState([]);
     const [paymentProcessing, setPaymentProcessing] = useState(false);
 
     const fetchProfile = () => {
@@ -379,12 +387,35 @@ const ProfilePage = () => {
                 setVerified(res.data.verified || false);
                 setAvatar(res.data.avatar || '');
                 setPortfolio(res.data.portfolio ? JSON.parse(res.data.portfolio) : []);
+                setResponseCredits(res.data.response_credits ?? 0);
+                setIsPro(res.data.is_pro || false);
+                setProUntil(res.data.pro_until || null);
             })
             .catch(err => console.error("Error fetching profile", err));
     };
 
+    const buyPackage = async (packageId) => {
+        try {
+            const res = await axios.post(`${API_URL}/monetization/buy`,
+                { package_id: packageId },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            toast.success(res.data.message);
+            fetchProfile();
+        } catch (err) {
+            toast.error(err.response?.data?.detail || 'Ошибка покупки');
+        }
+    };
+
     useEffect(() => {
         fetchProfile();
+
+        // Пакеты монетизации для специалистов
+        if (role === 'specialist') {
+            axios.get(`${API_URL}/monetization/packages`)
+                .then(res => setPackages(res.data.packages))
+                .catch(() => {});
+        }
 
         // Check if real payments are configured
         axios.get(`${API_URL}/payments/status`)
@@ -547,6 +578,35 @@ const ProfilePage = () => {
                     </div>
                 )}
 
+                {/* Монетизация: пакеты откликов и PRO */}
+                {role === 'specialist' && (
+                    <div className="p-6 border-b border-ink/15 grain">
+                        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+                            <h3 className="font-display font-bold uppercase text-sm">Отклики и PRO</h3>
+                            {isPro ? (
+                                <span className="text-xs font-extrabold"><ProBadge /> <span className="ml-2 text-ink/60">до {(proUntil || '').slice(0, 10)} · отклики безлимит</span></span>
+                            ) : (
+                                <span className="text-xs font-extrabold uppercase tracking-wider text-ink/60">Осталось откликов: {responseCredits}</span>
+                            )}
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {packages.map(p => (
+                                <button
+                                    key={p.id}
+                                    onClick={() => buyPackage(p.id)}
+                                    className={`border-2 border-ink p-4 text-left transition hover:hard-shadow-sm ${p.type === 'pro' ? 'bg-[#D4A017]/20' : 'bg-white'}`}
+                                >
+                                    <div className="font-extrabold flex items-center gap-2">{p.type === 'pro' && <ProBadge />}{p.title}</div>
+                                    <div className="text-[11px] font-bold uppercase tracking-wider text-ink/50 mt-1">
+                                        {p.type === 'responses' ? `${p.credits} откликов` : 'Безлимит откликов · приоритет в списке · значок PRO'}
+                                    </div>
+                                    <div className="font-display font-bold text-lg mt-2">{p.price} ₽ <span className="font-sans text-[11px] font-bold text-ink/40 uppercase tracking-wider">с баланса</span></div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 <form onSubmit={handleSave} className="flex flex-col gap-5 p-6">
                     <div>
                         <label className={labelCls}>Ваш Email (Логин)</label>
@@ -672,7 +732,7 @@ const TaskPage = () => {
         if (!responseText.trim() || sending) return;
         setSending(true);
         try {
-            await axios.post(`${API_URL}/tasks/${task.id}/responses`,
+            const res = await axios.post(`${API_URL}/tasks/${task.id}/responses`,
                 {
                     text: responseText,
                     proposed_price: proposedPrice ? parseInt(proposedPrice) : null,
@@ -680,7 +740,7 @@ const TaskPage = () => {
                 },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
-            toast.success('Ваш отклик успешно отправлен заказчику!');
+            toast.success('Ваш отклик успешно отправлен заказчику!' + (res.data && res.data.credits_left !== null && res.data.credits_left !== undefined ? ` Осталось откликов: ${res.data.credits_left}` : ''));
             setResponseText('');
             setProposedPrice('');
             setEstimatedDays('');
@@ -897,6 +957,7 @@ const PublicProfilePage = () => {
                     <div className="flex-grow">
                         <h1 className="font-display font-bold uppercase text-xl md:text-2xl flex items-center gap-2 flex-wrap">
                             {user.name || `Пользователь №${user.id}`}
+                            {user.is_pro && <ProBadge />}
                             {user.verified && <span className="text-signal" title="Проверенный">✓</span>}
                         </h1>
                         <div className="flex gap-2 mt-3 flex-wrap">
@@ -1161,7 +1222,7 @@ const Feed = () => {
     const handleSendResponse = async () => {
         if (!responseText.trim()) return;
         try {
-            await axios.post(`${API_URL}/tasks/${selectedTask.id}/responses`,
+            const res = await axios.post(`${API_URL}/tasks/${selectedTask.id}/responses`,
                 {
                     text: responseText,
                     proposed_price: proposedPrice ? parseInt(proposedPrice) : null,
@@ -1169,7 +1230,7 @@ const Feed = () => {
                 },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
-            toast.success('Ваш отклик успешно отправлен заказчику!');
+            toast.success('Ваш отклик успешно отправлен заказчику!' + (res.data && res.data.credits_left !== null && res.data.credits_left !== undefined ? ` Осталось откликов: ${res.data.credits_left}` : ''));
             setSelectedTask(null);
             setResponseText('');
             setProposedPrice('');
@@ -1550,6 +1611,7 @@ const Feed = () => {
                                                             {r.specialist_online && <span className="inline-block w-2.5 h-2.5 bg-[#3BA55D] mr-2 align-middle" title="Сейчас онлайн"></span>}
                                                             {r.specialist_name || `Специалист №${r.specialist_id}`}
                                                         </Link>
+                                                        {r.specialist_pro && <ProBadge />}
                                                         {r.specialist_verified && (
                                                             <span className="text-signal" title="Проверенный">✓</span>
                                                         )}
