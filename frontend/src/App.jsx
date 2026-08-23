@@ -233,7 +233,7 @@ const CreateTaskModal = ({ onClose, onTaskCreated }) => {
 
     return (
         <div className={`${modalOverlay} overflow-y-auto`}>
-            <div ref={panelRef} tabIndex={-1} className={`${modalPanel} w-full max-w-2xl my-8 p-6 md:p-8 outline-none focus:ring-2 focus:ring-signal`}>
+            <div ref={panelRef} tabIndex={-1} className={`${modalPanel} w-full max-w-2xl max-h-[calc(100vh-2rem)] overflow-y-auto my-4 p-6 md:p-8 outline-none focus:ring-2 focus:ring-signal`}>
                 <h2 className="font-display font-bold uppercase text-xl md:text-2xl">Новый заказ</h2>
                 <form onSubmit={handleSubmit} className="flex flex-col gap-4 mt-6">
                     <div>
@@ -1585,7 +1585,7 @@ const Feed = () => {
                 {/* Modal for Specialist to Write Response */}
                 {selectedTask && (
                     <div className={modalOverlay}>
-                        <div ref={responseRef} tabIndex={-1} className={`${modalPanel} w-full max-w-lg p-6 outline-none focus:ring-2 focus:ring-signal`}>
+                        <div ref={responseRef} tabIndex={-1} className={`${modalPanel} w-full max-w-lg max-h-[calc(100vh-2rem)] overflow-y-auto p-6 outline-none focus:ring-2 focus:ring-signal`}>
                             <h2 className="font-display font-bold uppercase text-lg leading-snug">Отклик: «{selectedTask.title}»</h2>
                             <textarea value={responseText} onChange={e => setResponseText(e.target.value)} className={`${inputCls} mt-5 mb-4`} rows="5" placeholder="Напишите сопроводительное письмо заказчику... Расскажите о вашем опыте."></textarea>
                             <div className="grid grid-cols-2 gap-4 mb-4">
