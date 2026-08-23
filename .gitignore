@@ -30,3 +30,33 @@ backend/uploads/
 frontend/src/dist/
 *_backup_old*
 backend/main_backup.py
+
+# Отладочные и вспомогательные скрипты (локальные, не для репозитория)
+/auto_paste*.py
+/manual_paste*.py
+/deploy_*.py
+/upload_project.py
+/open_repo.py
+/open_new_repo.py
+/pw_push.py
+/check_app.py
+/check_github*.py
+/debug_login.py
+/debug_railway.py
+/run_app.py
+/final_test.py
+/test_app*.py
+/test_geo_ui.py
+/test_login_final.py
+/generate_screenshots*.py
+/fix_npm*.js
+/test_task.json
+/start_all.bat
+/start_clean.bat
+
+# Статус-заметки процесса разработки
+/FINAL_STATUS.md
+/PHASE_2_COMPLETE.md
+/PHOTO_UPLOAD_COMPLETE.md
+/PROGRESS.md
+/STATUS.md

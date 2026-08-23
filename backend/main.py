@@ -19,9 +19,22 @@ from file_utils import save_upload_file, delete_file, UPLOAD_DIR, validate_image
 from geocoding import geocode_address
 import payments
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "marketplace_super_secret")
 ALGORITHM = "HS256"
 DB_URL = os.environ.get("DATABASE_URL", "sqlite:///./marketplace_v3.db")
+
+# JWT-ключ обязателен на проде. Если его нет, но это Postgres или ENV=production —
+# падаем на старте, а не подписываем токены предсказуемым дефолтом (подделка JWT).
+SECRET_KEY = os.environ.get("SECRET_KEY")
+_is_production = (
+    os.environ.get("ENV", "").lower() == "production"
+    or DB_URL.startswith("postgres")
+)
+if not SECRET_KEY:
+    if _is_production:
+        raise RuntimeError(
+            "SECRET_KEY environment variable must be set in production."
+        )
+    SECRET_KEY = "marketplace_super_secret"  # только для локальной разработки
 # Render/Heroku отдают postgres:// — SQLAlchemy 2 требует явный драйвер
 if DB_URL.startswith("postgres://"):
     DB_URL = DB_URL.replace("postgres://", "postgresql+psycopg2://", 1)

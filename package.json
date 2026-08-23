@@ -1,0 +1,10 @@
+{
+    "name": "marketplace-deploy",
+    "private": true,
+    "devDependencies": {
+        "@railway/cli": "^4.30.3"
+    },
+    "scripts": {
+        "railway": "railway"
+    }
+}
