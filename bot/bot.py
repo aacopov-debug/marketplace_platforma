@@ -27,11 +27,11 @@ CATEGORIES = {
 }
 
 
-def tg(method, **params):
+def tg(method, _http_timeout=15, **params):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/{method}"
     data = json.dumps(params).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=25) as r:
+    with urllib.request.urlopen(req, timeout=_http_timeout) as r:
         return json.loads(r.read().decode("utf-8"))
 
 
@@ -128,16 +128,22 @@ def main():
         print("TG_BOT_TOKEN не задан — бот не запущен")
         return
     start_health_server()
+    # Снимаем возможный webhook — иначе getUpdates возвращает 409 и бот молчит
+    try:
+        tg("deleteWebhook", drop_pending_updates=False)
+    except Exception as e:
+        print("deleteWebhook error:", e)
     print("Bot started, polling...")
     offset = None
     last_task_id = None
+    POLL_TIMEOUT = 25
     while True:
-        # 1) телеграм-апдейты
+        # 1) телеграм-апдейты (HTTP-таймаут строго больше long-polling, иначе рвётся каждый пустой опрос)
         try:
-            params = {"timeout": 25}
+            params = {"timeout": POLL_TIMEOUT}
             if offset is not None:
                 params["offset"] = offset
-            result = tg("getUpdates", **params)
+            result = tg("getUpdates", _http_timeout=POLL_TIMEOUT + 10, **params)
             for upd in result.get("result", []):
                 offset = upd["update_id"] + 1
                 handle_update(upd)
