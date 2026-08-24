@@ -189,20 +189,23 @@ Base.metadata.create_all(bind=engine)
 def _run_column_migrations():
     """Добавляет новые колонки в уже существующие таблицы (create_all их не трогает)"""
     from sqlalchemy import text
+    is_pg = "postgresql" in DB_URL
+    # PG понимает IF NOT EXISTS — не отравляет транзакцию. SQLite не понимает, но там ловим исключением.
+    ck = "IF NOT EXISTS " if is_pg else ""
     migrations = [
-        "ALTER TABLE users ADD COLUMN last_seen VARCHAR",
-        "ALTER TABLE reviews ADD COLUMN target VARCHAR DEFAULT 'specialist'",
-        "ALTER TABLE users ADD COLUMN response_credits INTEGER DEFAULT 5",
-        "ALTER TABLE users ADD COLUMN is_pro BOOLEAN DEFAULT false",
-        "ALTER TABLE users ADD COLUMN pro_until VARCHAR",
+        f"ALTER TABLE users ADD COLUMN {ck}last_seen VARCHAR",
+        f"ALTER TABLE reviews ADD COLUMN {ck}target VARCHAR DEFAULT 'specialist'",
+        f"ALTER TABLE users ADD COLUMN {ck}response_credits INTEGER DEFAULT 5",
+        f"ALTER TABLE users ADD COLUMN {ck}is_pro BOOLEAN DEFAULT false",
+        f"ALTER TABLE users ADD COLUMN {ck}pro_until VARCHAR",
     ]
-    with engine.connect() as conn:
-        for m in migrations:
+    for m in migrations:
+        with engine.connect() as conn:  # своя транзакция на каждую миграцию
             try:
                 conn.execute(text(m))
                 conn.commit()
             except Exception:
-                conn.rollback()  # колонка уже существует
+                conn.rollback()  # колонка уже существует (SQLite)
 
 _run_column_migrations()
 

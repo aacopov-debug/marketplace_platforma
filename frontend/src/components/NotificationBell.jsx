@@ -86,9 +86,9 @@ export const NotificationBell = ({ token }) => {
                 )}
             </button>
 
-            {/* Dropdown panel */}
+            {/* Dropdown panel — на мобиле по центру экрана, на десктопе выпадает под колокольчиком */}
             {open && (
-                <div className="absolute right-0 top-12 w-80 bg-paper border-2 border-ink hard-shadow z-50">
+                <div className="fixed inset-x-4 top-20 mx-auto max-w-sm sm:absolute sm:inset-x-auto sm:top-12 sm:right-0 sm:mx-0 sm:w-80 bg-paper border-2 border-ink hard-shadow z-50">
                     {/* Header */}
                     <div className="flex justify-between items-center px-4 py-3 border-b-2 border-ink">
                         <h3 className="font-display font-bold uppercase text-sm">Уведомления</h3>

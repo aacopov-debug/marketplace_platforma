@@ -1157,6 +1157,7 @@ const Feed = () => {
     // For Reviews
     const [reviewingTask, setReviewingTask] = useState(null);
     const [reviewRating, setReviewRating] = useState(5);
+    const [reviewHover, setReviewHover] = useState(0);
     const [reviewComment, setReviewComment] = useState('');
 
     const fetchTasks = () => {
@@ -1314,9 +1315,11 @@ const Feed = () => {
             toast.success('Спасибо за ваш отзыв!');
             setReviewingTask(null);
             setReviewRating(5);
+            setReviewHover(0);
             setReviewComment('');
+            fetchTasks();
         } catch (err) {
-            toast.error('Ошибка отправки отзыва.');
+            toast.error(err.response?.data?.detail || 'Ошибка отправки отзыва.');
         }
     };
 
@@ -1738,17 +1741,23 @@ const Feed = () => {
                             <h2 className="font-display font-bold uppercase text-xl">{role === 'customer' ? 'Оцените исполнителя' : 'Оцените заказчика'}</h2>
                             <p className="mt-3 text-ink/60 font-semibold">Заказ &laquo;{reviewingTask.title}&raquo; завершен. {role === 'customer' ? 'Как вам работа специалиста?' : 'Как вам работа с этим заказчиком?'}</p>
 
-                            <div className="my-6 flex gap-2 justify-center">
-                                {[1, 2, 3, 4, 5].map(star => (
-                                    <button
-                                        key={star}
-                                        onClick={() => setReviewRating(star)}
-                                        className={`w-12 h-12 border-2 border-ink text-2xl flex items-center justify-center transition hover:hard-shadow-sm ${reviewRating >= star ? 'bg-ink text-paper' : 'bg-white text-ink/25'}`}
-                                    >
-                                        ★
-                                    </button>
-                                ))}
+                            <div className="my-6 flex gap-2 justify-center" onMouseLeave={() => setReviewHover(0)}>
+                                {[1, 2, 3, 4, 5].map(star => {
+                                    const active = (reviewHover || reviewRating) >= star;
+                                    return (
+                                        <button
+                                            key={star}
+                                            type="button"
+                                            onClick={() => setReviewRating(star)}
+                                            onMouseEnter={() => setReviewHover(star)}
+                                            className={`w-12 h-12 border-2 border-ink text-2xl flex items-center justify-center transition ${active ? 'bg-ink text-paper scale-110 hard-shadow-sm' : 'bg-white text-ink/25 hover:text-ink/50'}`}
+                                        >
+                                            ★
+                                        </button>
+                                    );
+                                })}
                             </div>
+                            <p className="-mt-3 mb-4 text-center text-sm font-extrabold uppercase tracking-wider text-ink/50">{reviewRating} / 5</p>
 
                             <textarea
                                 value={reviewComment}
