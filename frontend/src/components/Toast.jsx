@@ -31,15 +31,15 @@ export const ToastProvider = ({ children }) => {
                     <div
                         key={t.id}
                         role="status"
-                        className={`flex items-start gap-3 border-2 border-ink hard-shadow-sm p-3.5 pr-9 relative bg-paper font-semibold text-sm ${t.type === 'error' ? 'text-signal' : 'text-ink'}`}
+                        className={`flex items-start gap-3 glass rounded-xl shadow-pop p-3.5 pr-9 relative font-semibold text-sm ${t.type === 'error' ? 'text-danger' : 'text-ink'}`}
                     >
-                        <span className={`shrink-0 w-7 h-7 flex items-center justify-center text-paper text-xs font-extrabold ${t.type === 'error' ? 'bg-signal' : 'bg-ink'}`}>
+                        <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-extrabold ${t.type === 'error' ? 'bg-danger' : t.type === 'info' ? 'bg-accent' : 'bg-success'}`}>
                             {t.type === 'error' ? '!' : t.type === 'info' ? 'i' : '✓'}
                         </span>
                         <span className="pt-0.5">{t.text}</span>
                         <button
                             onClick={() => dismiss(t.id)}
-                            className="absolute top-1.5 right-2 text-ink/40 hover:text-ink font-extrabold transition"
+                            className="absolute top-1.5 right-2 text-muted hover:text-ink font-extrabold transition"
                             aria-label="Закрыть уведомление"
                         >
                             ×

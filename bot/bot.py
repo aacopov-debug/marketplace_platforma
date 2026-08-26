@@ -13,6 +13,7 @@ import json
 import os
 import time
 import urllib.request
+from html import escape as _html_escape
 
 BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "")
 API_BASE = os.environ.get("API_URL", "https://deloz-backend.onrender.com")
@@ -68,9 +69,13 @@ def fetch_new_tasks(last_id):
 def notify_all(task):
     cat = CATEGORIES.get(task.get("category"), task.get("category"))
     place = "🌐 Удалённо" if task.get("is_remote") else (f"📍 {task.get('city')}" if task.get("city") else "")
+    # Экранируем пользовательский ввод — parse_mode=HTML иначе позволяет инъекцию разметки
+    title = _html_escape(str(task.get("title", "")))
+    cat = _html_escape(str(cat)) if cat else cat
+    place = _html_escape(place)
     text = (
         f"Новый заказ на ДЕЛО\n\n"
-        f"<b>{task['title']}</b>\n"
+        f"<b>{title}</b>\n"
         f"{cat}" + (f" · {place}" if place else "") + "\n"
         f"💰 Бюджет: {task.get('budget') or 0} ₽\n\n"
         f"Откликнуться: {FRONTEND_URL}/task/{task['id']}"

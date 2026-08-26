@@ -31,7 +31,6 @@ export const NotificationBell = ({ token }) => {
             .catch(() => {});
     };
 
-    // Poll every 15 seconds for new notifications
     useEffect(() => {
         if (!token) return;
         fetchCount();
@@ -39,7 +38,6 @@ export const NotificationBell = ({ token }) => {
         return () => clearInterval(interval);
     }, [token]);
 
-    // Close panel when clicking outside
     useEffect(() => {
         const handler = (e) => {
             if (panelRef.current && !panelRef.current.contains(e.target)) {
@@ -69,43 +67,39 @@ export const NotificationBell = ({ token }) => {
 
     return (
         <div className="relative" ref={panelRef}>
-            {/* Bell button */}
             <button
                 onClick={handleOpen}
-                className="relative p-2 bg-white border-2 border-ink transition hover:hard-shadow-sm"
+                className="relative p-2 rounded-lg bg-surface-2 border border-border transition hover:border-border-bright hover:bg-elevated"
                 title="Уведомления"
             >
-                <svg className="w-5 h-5 text-ink" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-5 h-5 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                         d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                 </svg>
                 {count > 0 && (
-                    <span className="absolute -top-2 -right-2 bg-signal text-white text-[10px] font-extrabold min-w-[18px] h-[18px] flex items-center justify-center px-1 border border-ink">
+                    <span className="absolute -top-2 -right-2 bg-danger text-white text-[10px] font-extrabold min-w-[18px] h-[18px] flex items-center justify-center px-1 rounded-full">
                         {count > 99 ? '99+' : count}
                     </span>
                 )}
             </button>
 
-            {/* Dropdown panel — на мобиле по центру экрана, на десктопе выпадает под колокольчиком */}
             {open && (
-                <div className="fixed inset-x-4 top-20 mx-auto max-w-sm sm:absolute sm:inset-x-auto sm:top-12 sm:right-0 sm:mx-0 sm:w-80 bg-paper border-2 border-ink hard-shadow z-50">
-                    {/* Header */}
-                    <div className="flex justify-between items-center px-4 py-3 border-b-2 border-ink">
+                <div className="fixed inset-x-4 top-20 mx-auto max-w-sm sm:absolute sm:inset-x-auto sm:top-12 sm:right-0 sm:mx-0 sm:w-80 glass rounded-2xl shadow-pop z-50">
+                    <div className="flex justify-between items-center px-4 py-3 border-b border-border">
                         <h3 className="font-display font-bold uppercase text-sm">Уведомления</h3>
                         {count > 0 && (
                             <button
                                 onClick={markAllRead}
-                                className="text-[10px] text-signal hover:underline font-extrabold uppercase tracking-wider"
+                                className="text-[10px] text-accent-bright hover:underline font-bold uppercase tracking-wider"
                             >
                                 Прочитать все
                             </button>
                         )}
                     </div>
 
-                    {/* List */}
                     <div className="max-h-96 overflow-y-auto">
                         {notifications.length === 0 ? (
-                            <div className="py-10 text-center text-ink/50">
+                            <div className="py-10 text-center text-muted">
                                 <div className="text-4xl mb-2">🔔</div>
                                 <p className="text-sm font-semibold">Уведомлений пока нет</p>
                             </div>
@@ -114,20 +108,20 @@ export const NotificationBell = ({ token }) => {
                                 <div
                                     key={n.id}
                                     onClick={() => !n.is_read && markRead(n.id)}
-                                    className={`px-4 py-3 border-b border-ink/15 cursor-pointer hover:bg-paper-dark transition ${!n.is_read ? 'bg-paper-dark' : ''}`}
+                                    className={`px-4 py-3 border-b border-border/60 cursor-pointer hover:bg-surface-2 transition ${!n.is_read ? 'bg-surface-2/60' : ''}`}
                                 >
                                     <div className="flex gap-3 items-start">
                                         <span className="text-xl mt-0.5 shrink-0">
                                             {TYPE_ICONS[n.type] || '🔔'}
                                         </span>
                                         <div className="flex-1 min-w-0">
-                                            <p className="font-extrabold text-sm leading-tight">
+                                            <p className="font-bold text-sm leading-tight">
                                                 {n.title}
                                             </p>
-                                            <p className="text-xs text-ink/60 mt-0.5 leading-snug font-medium">
+                                            <p className="text-xs text-muted mt-0.5 leading-snug font-medium">
                                                 {n.text}
                                             </p>
-                                            <p className="text-[10px] text-ink/40 mt-1 font-semibold uppercase tracking-wide">
+                                            <p className="text-[10px] text-muted/60 mt-1 font-semibold uppercase tracking-wide">
                                                 {new Date(n.created_at).toLocaleString('ru-RU', {
                                                     day: '2-digit', month: 'short',
                                                     hour: '2-digit', minute: '2-digit'
@@ -135,7 +129,7 @@ export const NotificationBell = ({ token }) => {
                                             </p>
                                         </div>
                                         {!n.is_read && (
-                                            <span className="w-2.5 h-2.5 bg-signal shrink-0 mt-1" />
+                                            <span className="w-2.5 h-2.5 rounded-full bg-accent shrink-0 mt-1" />
                                         )}
                                     </div>
                                 </div>

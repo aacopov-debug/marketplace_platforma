@@ -132,12 +132,12 @@ export const TaskMap = ({ tasks, onTaskClick, selectedTaskId }) => {
 
     return (
         <div className="w-full h-full relative">
-            <div ref={mapRef} className="w-full h-full rounded-xl overflow-hidden border border-gray-200" />
+            <div ref={mapRef} className="w-full h-full overflow-hidden" />
             {!mapReady && (
-                <div className="absolute inset-0 flex items-center justify-center bg-gray-100 rounded-xl">
+                <div className="absolute inset-0 flex items-center justify-center bg-surface rounded-xl">
                     <div className="text-center">
                         <div className="text-4xl mb-2 animate-pulse">🗺️</div>
-                        <p className="text-gray-600">Загрузка карты...</p>
+                        <p className="text-muted">Загрузка карты...</p>
                     </div>
                 </div>
             )}
@@ -231,13 +231,13 @@ export const LocationPicker = ({ initialLocation, onLocationSelect, city = 'Мо
 
     return (
         <div className="w-full h-64 relative">
-            <div ref={mapRef} className="w-full h-full rounded-lg overflow-hidden border border-gray-300" />
+            <div ref={mapRef} className="w-full h-full overflow-hidden rounded-xl" />
             {!mapReady && (
-                <div className="absolute inset-0 flex items-center justify-center bg-gray-100 rounded-lg">
-                    <p className="text-gray-600">Загрузка карты...</p>
+                <div className="absolute inset-0 flex items-center justify-center bg-surface rounded-xl">
+                    <p className="text-muted">Загрузка карты...</p>
                 </div>
             )}
-            <p className="text-xs text-gray-500 mt-1">Кликните на карту, чтобы указать место выполнения</p>
+            <p className="text-xs text-muted mt-1">Кликните на карту, чтобы указать место выполнения</p>
         </div>
     );
 };

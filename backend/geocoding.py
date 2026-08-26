@@ -7,7 +7,7 @@ import os
 import requests
 from typing import Optional, Tuple
 
-YANDEX_GEOCODER_API_KEY = os.environ.get("YANDEX_GEOCODER_API_KEY", "b9306462-51ee-416f-bc21-6a8688d5dafe")
+YANDEX_GEOCODER_API_KEY = os.environ.get("YANDEX_GEOCODER_API_KEY", "")
 YANDEX_GEOCODER_URL = "https://geocode-maps.yandex.ru/1.x/"
 
 def geocode_address(city: str, address: Optional[str] = None) -> Optional[Tuple[float, float]]:

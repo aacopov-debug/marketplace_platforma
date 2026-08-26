@@ -50,7 +50,7 @@ export const ImageUploader = ({ token, endpoint, onUploadSuccess, buttonText = "
 
     return (
         <div className="inline-block">
-            <label className={`${uploading ? 'opacity-50 cursor-wait' : 'cursor-pointer'} inline-flex items-center gap-2 bg-ink text-paper px-4 py-2.5 border-2 border-ink font-display text-[11px] uppercase tracking-wider transition hover:hard-shadow-sm`}>
+            <label className={`${uploading ? 'opacity-50 cursor-wait' : 'cursor-pointer'} inline-flex items-center gap-2 rounded-xl bg-accent text-white px-4 py-2.5 font-display text-[11px] uppercase tracking-wider transition hover:bg-accent-bright hover:glow-accent-sm`}>
                 {uploading ? (
                     <>
                         <span className="animate-spin">⏳</span>
@@ -70,7 +70,7 @@ export const ImageUploader = ({ token, endpoint, onUploadSuccess, buttonText = "
                     className="hidden"
                 />
             </label>
-            {error && <p className="text-signal text-sm mt-2 font-bold">{error}</p>}
+            {error && <p className="text-danger text-sm mt-2 font-bold">{error}</p>}
         </div>
     );
 };
@@ -79,7 +79,7 @@ export const AvatarUploader = ({ token, currentAvatar, onUploadSuccess }) => {
     return (
         <div className="flex flex-col items-start gap-3">
             {currentAvatar && (
-                <img src={currentAvatar} alt="Avatar" className="w-32 h-32 object-cover border-2 border-ink" />
+                <img src={currentAvatar} alt="Avatar" className="w-32 h-32 object-cover rounded-xl border border-border" />
             )}
             <ImageUploader
                 token={token}
@@ -111,15 +111,15 @@ export const PortfolioUploader = ({ token, portfolio = [], onUploadSuccess }) =>
                             <img
                                 src={img}
                                 alt={`Portfolio ${idx + 1}`}
-                                className="w-full h-32 object-cover border-2 border-ink transition hover:hard-shadow-sm cursor-pointer"
+                                className="w-full h-32 object-cover rounded-xl border border-border transition hover:border-accent/60 hover:glow-accent-sm cursor-pointer"
                                 onClick={() => window.open(img, '_blank')}
                             />
                         </div>
                     ))}
                 </div>
             ) : (
-                <div className="text-center py-8 bg-paper-dark border-2 border-dashed border-ink/40">
-                    <p className="text-ink/50 font-semibold">Портфолио пока пусто. Добавьте примеры своих работ!</p>
+                <div className="text-center py-8 rounded-xl bg-surface-2/60 border border-dashed border-border-bright/60">
+                    <p className="text-muted font-semibold">Портфолио пока пусто. Добавьте примеры своих работ!</p>
                 </div>
             )}
         </div>

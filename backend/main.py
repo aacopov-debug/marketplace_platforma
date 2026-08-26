@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 import json
 import asyncio
 from enum import Enum as PyEnum
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator, Field
 from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, Text, Enum as SqlaEnum
 from sqlalchemy import LargeBinary as SqlaLargeBinary
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
@@ -223,7 +223,32 @@ def get_db():
     finally: db.close()
 
 app = FastAPI(title="ProfiClone API - YouDo Edition")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+# CORS: явный whitelist источников вместо "*".
+# ALLOWED_ORIGINS — список через запятую; по умолчанию локальный фронт Vite.
+_default_origins = "http://localhost:5173,http://127.0.0.1:5173"
+_frontend_url = os.environ.get("FRONTEND_URL")
+_origins_env = os.environ.get("ALLOWED_ORIGINS", _default_origins)
+allowed_origins = [o.strip() for o in _origins_env.split(",") if o.strip()]
+if _frontend_url and _frontend_url not in allowed_origins:
+    allowed_origins.append(_frontend_url)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.middleware("http")
+async def security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if _is_production:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 # --- Онлайн-статусы: обновляем last_seen не чаще раза в минуту ---
 _seen_cache: dict[int, datetime] = {}
@@ -258,6 +283,21 @@ def user_online(user) -> bool:
         return (datetime.utcnow() - datetime.fromisoformat(user.last_seen)).total_seconds() < 120
     except Exception:
         return False
+
+# --- Простой in-memory rate limiter (без внешних зависимостей) ---
+# Скользящее окно по (ключ). Защищает login/register/forgot от брутфорса и спама.
+_rate_buckets: dict[str, list[float]] = {}
+
+def rate_limit(request: Request, bucket: str, limit: int, window_sec: int):
+    import time as _time
+    ip = request.client.host if request.client else "unknown"
+    key = f"{bucket}:{ip}"
+    now = _time.time()
+    hits = [t for t in _rate_buckets.get(key, []) if now - t < window_sec]
+    if len(hits) >= limit:
+        raise HTTPException(429, "Слишком много запросов, попробуйте позже")
+    hits.append(now)
+    _rate_buckets[key] = hits
 
 # Mount uploads directory for serving images
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
@@ -298,6 +338,15 @@ class UserCreate(BaseModel):
     password: str
     role: UserRole
     name: Optional[str] = None
+
+    @field_validator("password")
+    @classmethod
+    def _password_policy(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Пароль должен быть не короче 8 символов")
+        if v.isdigit() or v.isalpha():
+            raise ValueError("Пароль должен содержать и буквы, и цифры")
+        return v
 
 class TaskCreate(BaseModel):
     title: str
@@ -347,12 +396,13 @@ class DepositRequest(BaseModel):
     amount: int
 
 class ReviewCreate(BaseModel):
-    rating: int
+    rating: int = Field(ge=1, le=5)
     comment: str = ""
 
 # Routes
 @app.post("/register/")
-def register(user: UserCreate, db: Session = Depends(get_db)):
+def register(user: UserCreate, request: Request, db: Session = Depends(get_db)):
+    rate_limit(request, "register", limit=5, window_sec=3600)
     if db.query(User).filter(User.email == user.email).first():
         raise HTTPException(400, "Email занят")
     new_user = User(email=user.email, hashed_password=hash_password(user.password), role=user.role, name=user.name)
@@ -361,7 +411,8 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
     return {"message": "Успех", "user_id": new_user.id}
 
 @app.post("/login")
-def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    rate_limit(request, "login", limit=10, window_sec=300)
     user = db.query(User).filter(User.email == form.username).first()
     if not user or not verify_password(form.password, user.hashed_password):
         raise HTTPException(401, "Ошибка")
@@ -374,6 +425,15 @@ class ForgotPasswordRequest(BaseModel):
 class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def _password_policy(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Пароль должен быть не короче 8 символов")
+        if v.isdigit() or v.isalpha():
+            raise ValueError("Пароль должен содержать и буквы, и цифры")
+        return v
 
 def send_email(to: str, subject: str, body: str):
     """Отправка письма через SMTP из переменных окружения"""
@@ -395,7 +455,8 @@ def send_email(to: str, subject: str, body: str):
         server.send_message(msg)
 
 @app.post("/auth/forgot-password")
-def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
+def forgot_password(req: ForgotPasswordRequest, request: Request, db: Session = Depends(get_db)):
+    rate_limit(request, "forgot", limit=5, window_sec=3600)
     user = db.query(User).filter(User.email == req.email).first()
     # Не раскрываем существование аккаунта — всегда отвечаем успехом
     if user:
@@ -656,14 +717,22 @@ def update_profile(profile: ProfileUpdate, token: str = Depends(oauth2_scheme), 
     db.commit()
     return {"message": "Профиль обновлен"}
 
+DEMO_DEPOSIT_MAX = 100000  # верхняя граница демо-пополнения (₽)
+
 @app.post("/wallet/deposit")
 def deposit_funds(req: DepositRequest, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    # Демо-пополнение без реальной оплаты. На проде это дыра «бесконечные деньги» —
+    # начисляем баланс только вне production, иначе заставляем идти через YooKassa.
+    if _is_production:
+        raise HTTPException(403, "Демо-пополнение недоступно. Используйте оплату через платёжную систему.")
     payload = decode_token_or_401(token)
     user = db.query(User).filter(User.id == int(payload.get("sub"))).first()
     if not user:
         raise HTTPException(404, "Пользователь не найден")
     if req.amount <= 0:
         raise HTTPException(400, "Сумма должна быть больше 0")
+    if req.amount > DEMO_DEPOSIT_MAX:
+        raise HTTPException(400, f"Слишком большая сумма (максимум {DEMO_DEPOSIT_MAX} ₽)")
 
     user.balance += req.amount
     tx = Transaction(user_id=user.id, amount=req.amount, type=TransactionType.deposit)
@@ -1106,11 +1175,11 @@ def public_file_url(request: Request, file_path: str) -> str:
 
 def save_file_to_db(db: Session, file: UploadFile) -> int:
     """Сохраняет изображение в базу и возвращает его id (файлы переживают перезапуск контейнера)"""
-    validate_image(file)
+    safe_ctype = validate_image(file)  # content-type определяется по содержимому, не по заголовку клиента
     data = file.file.read()
     stored = StoredFile(
         filename=file.filename or "image",
-        content_type=file.content_type or "image/jpeg",
+        content_type=safe_ctype,
         data=data
     )
     db.add(stored)
@@ -1122,7 +1191,12 @@ def get_file(file_id: int, db: Session = Depends(get_db)):
     stored = db.query(StoredFile).filter(StoredFile.id == file_id).first()
     if not stored:
         raise HTTPException(404, "Файл не найден")
-    return FastResponse(content=stored.data, media_type=stored.content_type)
+    # nosniff + attachment-safe: не даём браузеру интерпретировать файл как HTML/скрипт
+    return FastResponse(
+        content=stored.data,
+        media_type=stored.content_type,
+        headers={"X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'"}
+    )
 
 @app.post("/upload/avatar")
 async def upload_avatar(request: Request, file: UploadFile = File(...), token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
