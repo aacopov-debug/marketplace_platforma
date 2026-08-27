@@ -1185,6 +1185,7 @@ const ResetPasswordPage = () => {
 const Feed = () => {
     const { token, role } = useAuthStore();
     const toast = useToast();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [selectedTask, setSelectedTask] = useState(null);
     const [tasks, setTasks] = useState([]);
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -1198,6 +1199,38 @@ const Feed = () => {
     const [cityFilter, setCityFilter] = useState('');
     const [remoteOnly, setRemoteOnly] = useState(false);
     const [viewMode, setViewMode] = useState('list'); // 'list' or 'map'
+
+    // Listen for custom events from BottomNav or elsewhere
+    useEffect(() => {
+        const handleSetViewMode = (e) => {
+            if (e.detail) {
+                setViewMode(e.detail);
+            }
+        };
+        const handleOpenCreateTask = () => {
+            setShowCreateModal(true);
+        };
+        window.addEventListener('delo:set-view-mode', handleSetViewMode);
+        window.addEventListener('delo:open-create-task', handleOpenCreateTask);
+        return () => {
+            window.removeEventListener('delo:set-view-mode', handleSetViewMode);
+            window.removeEventListener('delo:open-create-task', handleOpenCreateTask);
+        };
+    }, []);
+
+    // Sync from URL search params (e.g. /?view=map or /?create=true)
+    useEffect(() => {
+        const view = searchParams.get('view');
+        if (view === 'map' || view === 'list') {
+            setViewMode(view);
+        }
+        if (searchParams.get('create') === 'true') {
+            setShowCreateModal(true);
+            const newParams = new URLSearchParams(searchParams);
+            newParams.delete('create');
+            setSearchParams(newParams, { replace: true });
+        }
+    }, [searchParams, setSearchParams]);
     const [sortBy, setSortBy] = useState('default');
     const [loading, setLoading] = useState(true);
     const [connError, setConnError] = useState(false);
@@ -1963,6 +1996,15 @@ export default function App() {
     const { isAuth, role, logout, token } = useAuthStore();
     const [showAuthModal, setShowAuthModal] = useState(false);
 
+    // Listen for global open-auth events (from BottomNav, buttons, etc.)
+    useEffect(() => {
+        const handleOpenAuth = () => {
+            setShowAuthModal(true);
+        };
+        window.addEventListener('delo:open-auth', handleOpenAuth);
+        return () => window.removeEventListener('delo:open-auth', handleOpenAuth);
+    }, []);
+
     return (
         <BrowserRouter>
             <div className="min-h-screen flex flex-col bg-base text-ink font-sans">
@@ -2026,11 +2068,7 @@ export default function App() {
                 {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
 
                 {/* Mobile Bottom Navigation Bar */}
-                <BottomNav onActionClick={() => {
-                    const createBtn = document.querySelector("#feed button");
-                    if (createBtn) createBtn.click();
-                    else window.location.href = "/";
-                }} />
+                <BottomNav onOpenAuth={() => setShowAuthModal(true)} />
             </div>
         </BrowserRouter>
     );
