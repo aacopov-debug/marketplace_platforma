@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { BrowserRouter, Routes, Route, Link, useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
+import { useNavStore } from './store/navStore';
 import { jwtDecode } from 'jwt-decode';
 import { AvatarUploader, PortfolioUploader } from './components/ImageUploader';
 import { TaskMap } from './components/TaskMap';
@@ -11,6 +12,7 @@ import { ConfirmDialog, Lightbox, useModalBehavior } from './components/Dialogs'
 import { AITaskAssistant } from './components/AITaskAssistant';
 import { BottomNav } from './components/BottomNav';
 import { MobileFilterDrawer } from './components/MobileFilterDrawer';
+import { ChatsDrawer } from './components/ChatsDrawer';
 import deloArt from './assets/delo_art.jpg';
 
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
@@ -1184,6 +1186,14 @@ const ResetPasswordPage = () => {
 
 const Feed = () => {
     const { token, role } = useAuthStore();
+    const {
+        viewMode,
+        setViewMode,
+        isCreateTaskOpen,
+        setCreateTaskOpen,
+        activeChatTask,
+        setActiveChatTask
+    } = useNavStore();
     const toast = useToast();
     const [searchParams, setSearchParams] = useSearchParams();
     const [selectedTask, setSelectedTask] = useState(null);
@@ -1198,9 +1208,8 @@ const Feed = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [cityFilter, setCityFilter] = useState('');
     const [remoteOnly, setRemoteOnly] = useState(false);
-    const [viewMode, setViewMode] = useState('list'); // 'list' or 'map'
 
-    // Listen for custom events from BottomNav or elsewhere
+    // Listen for custom events from BottomNav, ChatsDrawer or elsewhere
     useEffect(() => {
         const handleSetViewMode = (e) => {
             if (e.detail) {
@@ -1209,14 +1218,29 @@ const Feed = () => {
         };
         const handleOpenCreateTask = () => {
             setShowCreateModal(true);
+            setCreateTaskOpen(true);
+        };
+        const handleOpenTaskChat = (e) => {
+            if (e.detail) {
+                setChatTask(e.detail);
+            }
         };
         window.addEventListener('delo:set-view-mode', handleSetViewMode);
         window.addEventListener('delo:open-create-task', handleOpenCreateTask);
+        window.addEventListener('delo:open-task-chat', handleOpenTaskChat);
         return () => {
             window.removeEventListener('delo:set-view-mode', handleSetViewMode);
             window.removeEventListener('delo:open-create-task', handleOpenCreateTask);
+            window.removeEventListener('delo:open-task-chat', handleOpenTaskChat);
         };
-    }, []);
+    }, [setViewMode, setCreateTaskOpen]);
+
+    // Sync activeChatTask from store
+    useEffect(() => {
+        if (activeChatTask) {
+            setChatTask(activeChatTask);
+        }
+    }, [activeChatTask]);
 
     // Sync from URL search params (e.g. /?view=map or /?create=true)
     useEffect(() => {
@@ -1226,11 +1250,12 @@ const Feed = () => {
         }
         if (searchParams.get('create') === 'true') {
             setShowCreateModal(true);
+            setCreateTaskOpen(true);
             const newParams = new URLSearchParams(searchParams);
             newParams.delete('create');
             setSearchParams(newParams, { replace: true });
         }
-    }, [searchParams, setSearchParams]);
+    }, [searchParams, setSearchParams, setViewMode, setCreateTaskOpen]);
     const [sortBy, setSortBy] = useState('default');
     const [loading, setLoading] = useState(true);
     const [connError, setConnError] = useState(false);
@@ -1938,7 +1963,15 @@ const Feed = () => {
                     </div>
                 )}
 
-                {showCreateModal && <CreateTaskModal onClose={() => setShowCreateModal(false)} onTaskCreated={fetchTasks} />}
+                {(showCreateModal || isCreateTaskOpen) && (
+                    <CreateTaskModal
+                        onClose={() => {
+                            setShowCreateModal(false);
+                            setCreateTaskOpen(false);
+                        }}
+                        onTaskCreated={fetchTasks}
+                    />
+                )}
 
                 {/* Mobile Filter Drawer */}
                 <MobileFilterDrawer
@@ -1994,16 +2027,24 @@ const Feed = () => {
 
 export default function App() {
     const { isAuth, role, logout, token } = useAuthStore();
+    const {
+        isAuthOpen,
+        setAuthOpen,
+        isChatsOpen,
+        setChatsOpen,
+        setActiveChatTask
+    } = useNavStore();
     const [showAuthModal, setShowAuthModal] = useState(false);
 
     // Listen for global open-auth events (from BottomNav, buttons, etc.)
     useEffect(() => {
         const handleOpenAuth = () => {
             setShowAuthModal(true);
+            setAuthOpen(true);
         };
         window.addEventListener('delo:open-auth', handleOpenAuth);
         return () => window.removeEventListener('delo:open-auth', handleOpenAuth);
-    }, []);
+    }, [setAuthOpen]);
 
     return (
         <BrowserRouter>
@@ -2023,7 +2064,7 @@ export default function App() {
                                 <button onClick={logout} className="text-accent-bright font-bold text-xs uppercase tracking-wider hover:underline underline-offset-4 transition">Выйти</button>
                             </div>
                         ) : (
-                            <button onClick={() => setShowAuthModal(true)} className="rounded-xl bg-accent text-white px-4 md:px-5 py-2 font-display text-[11px] uppercase tracking-wider transition hover:bg-accent-bright hover:glow-accent-sm">
+                            <button onClick={() => setAuthOpen(true)} className="rounded-xl bg-accent text-white px-4 md:px-5 py-2 font-display text-[11px] uppercase tracking-wider transition hover:bg-accent-bright hover:glow-accent-sm">
                                 Войти
                             </button>
                         )}
@@ -2045,7 +2086,7 @@ export default function App() {
                     </Routes>
                 </main>
 
-                <footer className="bg-surface border-t border-border mt-16">
+                <footer className="bg-surface border-t border-border mt-16 mb-16 md:mb-0">
                     <div className="max-w-6xl mx-auto px-4 md:px-8 py-10 grid gap-8 md:grid-cols-3">
                         <div>
                             <div className="font-display font-extrabold text-lg">ДЕЛО<span className="text-accent">.</span></div>
@@ -2065,10 +2106,26 @@ export default function App() {
                     </div>
                 </footer>
 
-                {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
+                {(showAuthModal || isAuthOpen) && (
+                    <AuthModal onClose={() => {
+                        setShowAuthModal(false);
+                        setAuthOpen(false);
+                    }} />
+                )}
+
+                {/* Sliding Chats Drawer over page */}
+                <ChatsDrawer
+                    isOpen={isChatsOpen}
+                    onClose={() => setChatsOpen(false)}
+                    onSelectTask={(task) => {
+                        setChatsOpen(false);
+                        setActiveChatTask(task);
+                        window.dispatchEvent(new CustomEvent('delo:open-task-chat', { detail: task }));
+                    }}
+                />
 
                 {/* Mobile Bottom Navigation Bar */}
-                <BottomNav onOpenAuth={() => setShowAuthModal(true)} />
+                <BottomNav onOpenAuth={() => setAuthOpen(true)} />
             </div>
         </BrowserRouter>
     );

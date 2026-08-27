@@ -1,38 +1,22 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { useNavStore } from '../store/navStore';
 
 export const BottomNav = ({
-    viewMode: controlledViewMode,
-    setViewMode: controlledSetViewMode,
     unreadMessagesCount = 0,
     unreadNotificationsCount = 0,
-    onOpenCreateTask,
-    onOpenAuth,
-    onOpenDialogs
 }) => {
     const location = useLocation();
     const navigate = useNavigate();
-    const { isAuth, role } = useAuthStore();
-    const [currentViewMode, setCurrentViewMode] = useState(controlledViewMode || 'list');
-
-    // Sync controlled view mode if passed as prop
-    useEffect(() => {
-        if (controlledViewMode) {
-            setCurrentViewMode(controlledViewMode);
-        }
-    }, [controlledViewMode]);
-
-    // Listen to global viewMode changes
-    useEffect(() => {
-        const handleViewModeChange = (e) => {
-            if (e.detail) {
-                setCurrentViewMode(e.detail);
-            }
-        };
-        window.addEventListener('delo:set-view-mode', handleViewModeChange);
-        return () => window.removeEventListener('delo:set-view-mode', handleViewModeChange);
-    }, []);
+    const { isAuth } = useAuthStore();
+    const {
+        viewMode,
+        setViewMode,
+        setAuthOpen,
+        setCreateTaskOpen,
+        setChatsOpen
+    } = useNavStore();
 
     const isHomePage = location.pathname === '/';
     const isProfilePage = location.pathname === '/profile';
@@ -52,79 +36,62 @@ export const BottomNav = ({
         }
     };
 
+    const scrollToFeed = () => {
+        setTimeout(() => {
+            const feedEl = document.getElementById('feed');
+            if (feedEl) {
+                feedEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } else {
+                window.scrollTo({ top: 350, behavior: 'smooth' });
+            }
+        }, 100);
+    };
+
     const handleFeedClick = () => {
         triggerHaptic('selection');
-        setCurrentViewMode('list');
-        if (controlledSetViewMode) {
-            controlledSetViewMode('list');
-        }
-        window.dispatchEvent(new CustomEvent('delo:set-view-mode', { detail: 'list' }));
+        setViewMode('list');
         if (!isHomePage) {
-            navigate('/');
+            navigate('/?view=list');
         }
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        scrollToFeed();
     };
 
     const handleMapClick = () => {
         triggerHaptic('selection');
-        setCurrentViewMode('map');
-        if (controlledSetViewMode) {
-            controlledSetViewMode('map');
-        }
-        window.dispatchEvent(new CustomEvent('delo:set-view-mode', { detail: 'map' }));
+        setViewMode('map');
         if (!isHomePage) {
             navigate('/?view=map');
         }
+        scrollToFeed();
     };
 
     const handleCreateClick = () => {
         triggerHaptic('medium');
         if (!isAuth) {
-            if (onOpenAuth) {
-                onOpenAuth();
-            } else {
-                window.dispatchEvent(new CustomEvent('delo:open-auth'));
-            }
+            setAuthOpen(true);
             return;
         }
 
-        if (onOpenCreateTask) {
-            onOpenCreateTask();
-        } else {
-            if (!isHomePage) {
-                navigate('/?create=true');
-            }
-            window.dispatchEvent(new CustomEvent('delo:open-create-task'));
+        if (!isHomePage) {
+            navigate('/?create=true');
         }
+        setCreateTaskOpen(true);
     };
 
     const handleMessagesClick = () => {
         triggerHaptic('light');
         if (!isAuth) {
-            if (onOpenAuth) {
-                onOpenAuth();
-            } else {
-                window.dispatchEvent(new CustomEvent('delo:open-auth'));
-            }
+            setAuthOpen(true);
             return;
         }
-
-        if (onOpenDialogs) {
-            onOpenDialogs();
-        } else {
-            navigate('/profile', { state: { tab: 'dialogs' } });
-            window.dispatchEvent(new CustomEvent('delo:open-chats'));
-        }
+        // Open sliding side drawer on top of current view!
+        setChatsOpen(true);
     };
 
     const handleProfileClick = () => {
         triggerHaptic('selection');
         if (!isAuth) {
-            if (onOpenAuth) {
-                onOpenAuth();
-            } else {
-                window.dispatchEvent(new CustomEvent('delo:open-auth'));
-            }
+            setAuthOpen(true);
             return;
         }
         navigate('/profile');
@@ -140,15 +107,15 @@ export const BottomNav = ({
                 <button
                     type="button"
                     onClick={handleFeedClick}
-                    className={`flex flex-col items-center justify-center flex-1 py-1 px-1 transition-all duration-200 active:scale-95 min-w-[56px] ${
-                        isHomePage && currentViewMode === 'list'
+                    className={`flex flex-col items-center justify-center flex-1 py-1 px-1 transition-all duration-200 active:scale-95 min-w-[56px] cursor-pointer ${
+                        isHomePage && viewMode === 'list'
                             ? 'text-accent-bright font-bold'
                             : 'text-muted hover:text-ink'
                     }`}
                 >
                     <div className="relative">
                         <span className="text-xl">📋</span>
-                        {isHomePage && currentViewMode === 'list' && (
+                        {isHomePage && viewMode === 'list' && (
                             <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-accent glow-accent-sm"></span>
                         )}
                     </div>
@@ -159,15 +126,15 @@ export const BottomNav = ({
                 <button
                     type="button"
                     onClick={handleMapClick}
-                    className={`flex flex-col items-center justify-center flex-1 py-1 px-1 transition-all duration-200 active:scale-95 min-w-[56px] ${
-                        isHomePage && currentViewMode === 'map'
+                    className={`flex flex-col items-center justify-center flex-1 py-1 px-1 transition-all duration-200 active:scale-95 min-w-[56px] cursor-pointer ${
+                        isHomePage && viewMode === 'map'
                             ? 'text-accent-bright font-bold'
                             : 'text-muted hover:text-ink'
                     }`}
                 >
                     <div className="relative">
                         <span className="text-xl">🗺️</span>
-                        {isHomePage && currentViewMode === 'map' && (
+                        {isHomePage && viewMode === 'map' && (
                             <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-accent glow-accent-sm"></span>
                         )}
                     </div>
