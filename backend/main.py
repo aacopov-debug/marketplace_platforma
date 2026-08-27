@@ -224,17 +224,18 @@ def get_db():
 
 app = FastAPI(title="ProfiClone API - YouDo Edition")
 
-# CORS: явный whitelist источников вместо "*".
-# ALLOWED_ORIGINS — список через запятую; по умолчанию локальный фронт Vite.
-_default_origins = "http://localhost:5173,http://127.0.0.1:5173"
+# CORS: whitelist + поддержка любых доменов *.onrender.com и локальной разработки
+_default_origins = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000"
 _frontend_url = os.environ.get("FRONTEND_URL")
 _origins_env = os.environ.get("ALLOWED_ORIGINS", _default_origins)
 allowed_origins = [o.strip() for o in _origins_env.split(",") if o.strip()]
 if _frontend_url and _frontend_url not in allowed_origins:
     allowed_origins.append(_frontend_url)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=r"https://.*\.onrender\.com",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
