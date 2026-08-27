@@ -8,6 +8,9 @@ import { TaskMap } from './components/TaskMap';
 import { NotificationBell } from './components/NotificationBell';
 import { useToast } from './components/Toast';
 import { ConfirmDialog, Lightbox, useModalBehavior } from './components/Dialogs';
+import { AITaskAssistant } from './components/AITaskAssistant';
+import { BottomNav } from './components/BottomNav';
+import { MobileFilterDrawer } from './components/MobileFilterDrawer';
 import deloArt from './assets/delo_art.jpg';
 
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
@@ -45,6 +48,30 @@ const modalPanel = "glass rounded-2xl shadow-pop";
 
 const chipCls = (active) =>
     `rounded-full px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-wide transition ${active ? 'bg-accent text-white glow-accent-sm' : 'bg-surface-2 text-muted border border-border hover:text-ink hover:border-border-bright'}`;
+
+
+const MasterBadge = ({ level = "novice", badges = [] }) => {
+    const levelMap = {
+        expert: { label: "👑 Эксперт", cls: "from-amber-400 to-yellow-500 text-black shadow-amber-500/20" },
+        pro: { label: "⭐ Профи", cls: "from-blue-500 to-cyan-400 text-white shadow-blue-500/20" },
+        master: { label: "🔨 Мастер", cls: "from-emerald-500 to-teal-400 text-white shadow-emerald-500/20" },
+        novice: { label: "🌱 Новичок", cls: "from-zinc-600 to-zinc-500 text-zinc-100" }
+    };
+    const info = levelMap[level] || levelMap.novice;
+
+    return (
+        <div className="flex flex-wrap items-center gap-1.5">
+            <span className={`inline-flex items-center gap-1 bg-gradient-to-r ${info.cls} text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full shadow-sm`}>
+                {info.label}
+            </span>
+            {badges.map((b, idx) => (
+                <span key={idx} className="inline-flex items-center gap-1 bg-surface-2 border border-border text-ink text-[10px] font-bold px-2 py-0.5 rounded-full" title={b.desc || b.label}>
+                    {b.icon} {b.label}
+                </span>
+            ))}
+        </div>
+    );
+};
 
 const ProBadge = () => (
     <span className="inline-block bg-gradient-to-r from-[#F59E0B] to-[#FBBF24] text-black text-[9px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-full align-middle">PRO</span>
@@ -231,11 +258,30 @@ const CreateTaskModal = ({ onClose, onTaskCreated }) => {
         }
     };
 
+    const handleAITaskApply = (parsedData) => {
+        if (parsedData.title) setTitle(parsedData.title);
+        if (parsedData.description) setDescription(parsedData.description);
+        if (parsedData.budget) setBudget(String(parsedData.budget));
+        if (parsedData.category) setCategory(parsedData.category);
+        if (parsedData.city) setCity(parsedData.city);
+        if (parsedData.address) setAddress(parsedData.address);
+        if (parsedData.is_remote !== undefined) setIsRemote(parsedData.is_remote);
+        toast.success("Данные от AI подставлены в форму!");
+    };
+
     return (
         <div className={`${modalOverlay} overflow-y-auto`}>
             <div ref={panelRef} tabIndex={-1} className={`${modalPanel} w-full max-w-2xl max-h-[calc(100vh-2rem)] overflow-y-auto my-4 p-6 md:p-8 outline-none focus:ring-2 focus:ring-accent/50`}>
-                <h2 className="font-display font-bold uppercase text-xl md:text-2xl">Новый заказ</h2>
-                <form onSubmit={handleSubmit} className="flex flex-col gap-4 mt-6">
+                <div className="flex items-center justify-between gap-4 mb-4">
+                    <h2 className="font-display font-bold uppercase text-xl md:text-2xl">Новый заказ</h2>
+                    <span className="text-xs font-bold uppercase tracking-wider text-muted bg-surface-2 px-3 py-1 rounded-full border border-border">✨ AI Ускорение</span>
+                </div>
+
+                <div className="mb-6">
+                    <AITaskAssistant onApplyTask={handleAITaskApply} onCancel={() => {}} />
+                </div>
+
+                <form onSubmit={handleSubmit} className="flex flex-col gap-4 mt-2">
                     <div>
                         <label className={labelCls}>Заголовок *</label>
                         <input type="text" placeholder="Например: Создать логотип для стартапа" required value={title} onChange={e => setTitle(e.target.value)} className={inputCls} />
@@ -543,6 +589,22 @@ const ProfilePage = () => {
                             <div>
                                 <div className="font-display font-bold text-xl">{completedTasks}</div>
                                 <div className="text-[11px] font-bold uppercase tracking-wider text-muted">Выполнено заказов</div>
+                            </div>
+                        </div>
+                        <div className="md:col-span-2 rounded-xl border border-accent/30 bg-accent/5 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                            <div>
+                                <div className="text-[11px] font-bold uppercase tracking-wider text-muted mb-1">Уровень мастерства</div>
+                                <MasterBadge
+                                    level={completedTasks >= 20 && (rating || 0) >= 4.9 ? "expert" : completedTasks >= 10 && (rating || 0) >= 4.7 ? "pro" : completedTasks >= 3 ? "master" : "novice"}
+                                    badges={[
+                                        { icon: "🛡", label: "Паспорт проверен", desc: "Личность подтверждена" },
+                                        { icon: "🤝", label: "Безопасная сделка", desc: "Гарантия выплат" },
+                                        { icon: "⚡", label: "Быстрый ответ", desc: "Отвечает за 5 минут" }
+                                    ]}
+                                />
+                            </div>
+                            <div className="text-xs font-bold text-accent-bright">
+                                {completedTasks < 3 ? "До уровня «Мастер»: еще " + (3 - completedTasks) + " зак." : completedTasks < 10 ? "До уровня «Профи»: еще " + (10 - completedTasks) + " зак." : "Высший статус"}
                             </div>
                         </div>
                     </div>
@@ -992,7 +1054,18 @@ const PublicProfilePage = () => {
                             </span>
                             {user.city && <span className="rounded-full border border-border bg-surface-2 text-[10px] font-bold uppercase tracking-widest px-2.5 py-1">📍 {user.city}</span>}
                             {user.rating !== null && <span className="rounded-full border border-border bg-surface-2 text-[10px] font-bold uppercase tracking-widest px-2.5 py-1">⭐ {user.rating} / 5</span>}
-                            {user.role === 'specialist' && <span className="rounded-full border border-border bg-surface-2 text-[10px] font-bold uppercase tracking-widest px-2.5 py-1">📋 {user.completed_tasks} заказов</span>}
+                            {user.role === 'specialist' && (
+                                <>
+                                    <span className="rounded-full border border-border bg-surface-2 text-[10px] font-bold uppercase tracking-widest px-2.5 py-1">📋 {user.completed_tasks} заказов</span>
+                                    <MasterBadge
+                                        level={(user.completed_tasks || 0) >= 20 && (user.rating || 0) >= 4.9 ? "expert" : (user.completed_tasks || 0) >= 10 && (user.rating || 0) >= 4.7 ? "pro" : (user.completed_tasks || 0) >= 3 ? "master" : "novice"}
+                                        badges={[
+                                            { icon: "🛡", label: "Проверен" },
+                                            { icon: "🤝", label: "Гарант" }
+                                        ]}
+                                    />
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -1115,6 +1188,8 @@ const Feed = () => {
     const [selectedTask, setSelectedTask] = useState(null);
     const [tasks, setTasks] = useState([]);
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [showMobileFilters, setShowMobileFilters] = useState(false);
+    const [showHeroAIModal, setShowHeroAIModal] = useState(false);
 
     // Filters
     const [categoryFilter, setCategoryFilter] = useState('');
@@ -1365,18 +1440,45 @@ const Feed = () => {
                         Найди своего специалиста: 12 категорий · отклики за минуты · безопасная сделка с резервированием средств.
                     </p>
 
-                    <form className="mt-8 flex max-w-lg mx-auto rounded-2xl overflow-hidden border border-border bg-surface-2 focus-within:border-accent/60 focus-within:glow-accent-sm transition" onSubmit={e => { e.preventDefault(); document.getElementById('feed')?.scrollIntoView({ behavior: 'smooth' }); }}>
-                        <input
-                            type="text"
-                            placeholder="Что нужно сделать?"
-                            className="flex-1 min-w-0 bg-transparent p-3 md:p-4 font-medium outline-none placeholder-muted/60"
-                            value={searchInput}
-                            onChange={(e) => setSearchInput(e.target.value)}
-                        />
-                        <button type="submit" className="bg-accent hover:bg-accent-bright text-white px-5 md:px-8 font-display text-[11px] uppercase tracking-wider transition">
-                            Найти
-                        </button>
-                    </form>
+                    {/* AI Prompt Quick Bar & Feature Trigger */}
+                    <div className="mt-8 max-w-2xl mx-auto">
+                        <div className="glass p-2 sm:p-2.5 rounded-2xl border border-accent/40 shadow-glow-sm flex flex-col sm:flex-row gap-2 items-stretch">
+                            <div className="flex-1 flex items-center gap-2.5 px-3 py-2 bg-surface-2/80 rounded-xl border border-border">
+                                <span className="text-accent text-lg">✨</span>
+                                <input
+                                    type="text"
+                                    placeholder="Опишите задачу AI (напр. «Починить кран в Казани»)..."
+                                    className="w-full bg-transparent text-sm font-medium outline-none placeholder-muted/60 text-ink"
+                                    value={searchInput}
+                                    onChange={(e) => setSearchInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter" && searchInput.trim()) {
+                                            e.preventDefault();
+                                            setShowCreateModal(true);
+                                        }
+                                    }}
+                                />
+                            </div>
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowCreateModal(true)}
+                                    className="flex-1 sm:flex-none rounded-xl bg-gradient-to-r from-accent to-[#38BDF8] text-white px-5 py-2.5 font-display text-xs uppercase tracking-wider transition hover:glow-accent-sm active:scale-[0.98] flex items-center justify-center gap-1.5 shadow-md"
+                                >
+                                    <span>AI Создать</span>
+                                    <span className="text-xs">⚡</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => document.getElementById("feed")?.scrollIntoView({ behavior: "smooth" })}
+                                    className="rounded-xl bg-surface-2 text-ink border border-border px-4 py-2.5 font-display text-xs uppercase tracking-wider transition hover:bg-elevated"
+                                >
+                                    Поиск
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
 
                     <div className="mt-5 flex flex-wrap gap-2 justify-center">
                         <button onClick={() => setCategoryFilter('')} className={chipCls(categoryFilter === '')}>Все</button>
@@ -1393,8 +1495,36 @@ const Feed = () => {
                 </div>
             </section>
 
-            {/* FILTERS — все элементы одной высоты на одной линии */}
+            {/* FILTERS — desktop grid & mobile drawer trigger */}
             <section className="border-b border-border bg-surface/60 backdrop-blur-sm">
+                <div className="max-w-6xl mx-auto px-4 md:px-8 py-3 md:hidden flex justify-between items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setShowMobileFilters(true)}
+                        className="flex-1 rounded-xl bg-surface-2 border border-border px-4 py-2.5 font-display text-xs uppercase tracking-wider text-ink flex items-center justify-center gap-2 transition hover:border-accent"
+                    >
+                        <span>⚙️ Фильтры</span>
+                        {(categoryFilter || cityFilter || remoteOnly || sortBy !== "default") && (
+                            <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+                        )}
+                    </button>
+                    <div className="flex gap-1.5">
+                        <button
+                            type="button"
+                            onClick={() => setViewMode("list")}
+                            className={`px-3 py-2.5 rounded-xl border text-xs font-bold ${viewMode === "list" ? "bg-accent text-white border-accent" : "bg-surface-2 text-muted border-border"}`}
+                        >
+                            📋
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setViewMode("map")}
+                            className={`px-3 py-2.5 rounded-xl border text-xs font-bold ${viewMode === "map" ? "bg-accent text-white border-accent" : "bg-surface-2 text-muted border-border"}`}
+                        >
+                            🗺
+                        </button>
+                    </div>
+                </div>
                 <div className="max-w-6xl mx-auto px-4 md:px-8 py-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[1fr_1fr_auto_auto] gap-3 items-center">
                     <select
                         className="h-[50px] w-full rounded-xl border border-border bg-surface-2 text-ink px-3 font-semibold outline-none focus:border-accent transition cursor-pointer"
@@ -1777,6 +1907,35 @@ const Feed = () => {
 
                 {showCreateModal && <CreateTaskModal onClose={() => setShowCreateModal(false)} onTaskCreated={fetchTasks} />}
 
+                {/* Mobile Filter Drawer */}
+                <MobileFilterDrawer
+                    isOpen={showMobileFilters}
+                    onClose={() => setShowMobileFilters(false)}
+                    categoryFilter={categoryFilter}
+                    setCategoryFilter={setCategoryFilter}
+                    cityFilter={cityFilter}
+                    setCityFilter={setCityFilter}
+                    remoteOnly={remoteOnly}
+                    setRemoteOnly={setRemoteOnly}
+                    sortBy={sortBy}
+                    setSortBy={setSortBy}
+                    categories={CATEGORIES}
+                    cities={CITIES}
+                    totalCount={tasks.length}
+                    activeFiltersCount={
+                        (categoryFilter ? 1 : 0) +
+                        (cityFilter ? 1 : 0) +
+                        (remoteOnly ? 1 : 0) +
+                        (sortBy !== "default" ? 1 : 0)
+                    }
+                    onReset={() => {
+                        setCategoryFilter("");
+                        setCityFilter("");
+                        setRemoteOnly(false);
+                        setSortBy("default");
+                    }}
+                />
+
                 {lightbox && (
                     <Lightbox
                         images={lightbox.images}
@@ -1865,6 +2024,13 @@ export default function App() {
                 </footer>
 
                 {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
+
+                {/* Mobile Bottom Navigation Bar */}
+                <BottomNav onActionClick={() => {
+                    const createBtn = document.querySelector("#feed button");
+                    if (createBtn) createBtn.click();
+                    else window.location.href = "/";
+                }} />
             </div>
         </BrowserRouter>
     );
