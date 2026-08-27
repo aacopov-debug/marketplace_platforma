@@ -2032,9 +2032,58 @@ export default function App() {
         setAuthOpen,
         isChatsOpen,
         setChatsOpen,
+        isCreateTaskOpen,
+        setCreateTaskOpen,
+        activeChatTask,
         setActiveChatTask
     } = useNavStore();
     const [showAuthModal, setShowAuthModal] = useState(false);
+
+    // Initialize Telegram Mini App SDK and synchronize Native BackButton
+    useEffect(() => {
+        try {
+            const tg = window.Telegram?.WebApp;
+            if (tg) {
+                tg.ready();
+                tg.expand?.();
+                if (tg.setHeaderColor) tg.setHeaderColor('#0A0E17');
+                if (tg.setBackgroundColor) tg.setBackgroundColor('#0A0E17');
+                tg.enableClosingConfirmation?.();
+            }
+        } catch (e) {
+            console.log('Telegram WebApp init error', e);
+        }
+    }, []);
+
+    // Telegram Native BackButton sync for mobile drawer & modals
+    useEffect(() => {
+        const tg = window.Telegram?.WebApp;
+        if (!tg?.BackButton) return;
+
+        const isAnyModalOpen = isChatsOpen || isAuthOpen || showAuthModal || isCreateTaskOpen || !!activeChatTask;
+
+        if (isAnyModalOpen) {
+            tg.BackButton.show();
+            const handleBackClick = () => {
+                if (isChatsOpen) setChatsOpen(false);
+                if (isAuthOpen || showAuthModal) {
+                    setAuthOpen(false);
+                    setShowAuthModal(false);
+                }
+                if (isCreateTaskOpen) setCreateTaskOpen(false);
+                if (activeChatTask) setActiveChatTask(null);
+                try {
+                    tg.HapticFeedback?.impactOccurred?.('light');
+                } catch {}
+            };
+            tg.BackButton.onClick(handleBackClick);
+            return () => {
+                tg.BackButton.offClick(handleBackClick);
+            };
+        } else {
+            tg.BackButton.hide();
+        }
+    }, [isChatsOpen, isAuthOpen, showAuthModal, isCreateTaskOpen, activeChatTask, setChatsOpen, setAuthOpen, setCreateTaskOpen, setActiveChatTask]);
 
     // Listen for global open-auth events (from BottomNav, buttons, etc.)
     useEffect(() => {
