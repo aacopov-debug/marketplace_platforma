@@ -62,10 +62,28 @@
         radial-gradient(ellipse 70% 60% at 50% 100%, rgba(124, 108, 255, 0.08), transparent);
 }
 
+/* Utility to hide scrollbars while maintaining scroll functionality */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+/* Mobile tap touch target optimizations */
+button, a, input, select, textarea {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Body & Safe area styling */
 body {
     background-color: var(--color-base);
     color: var(--color-ink);
     font-family: var(--font-sans);
+    min-height: 100vh;
+    min-height: 100dvh;
 }
 
 ::selection {
@@ -75,8 +93,8 @@ body {
 
 /* Scrollbars */
 ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: 8px;
+    height: 8px;
 }
 
 ::-webkit-scrollbar-track {
