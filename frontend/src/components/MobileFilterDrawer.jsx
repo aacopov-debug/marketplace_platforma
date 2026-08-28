@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import CityInput from './CityInput';
 
 export const MobileFilterDrawer = ({
     isOpen,
@@ -115,23 +116,17 @@ export const MobileFilterDrawer = ({
                         </div>
                     </div>
 
-                    {/* 2. City */}
+                    {/* 2. City: ручной ввод + выбор из списка */}
                     <div>
                         <label className="block text-[11px] font-bold uppercase tracking-wider text-muted mb-2">
                             Город
                         </label>
-                        <select
+                        <CityInput
                             value={cityFilter}
-                            onChange={(e) => setCityFilter(e.target.value)}
+                            onChange={setCityFilter}
+                            placeholder="Все города (или введите любой)..."
                             className="w-full h-12 rounded-xl border border-border bg-surface-2 text-ink px-3 font-semibold outline-none focus:border-accent"
-                        >
-                            <option value="">Все города</option>
-                            {cities.map((c) => (
-                                <option key={c} value={c}>
-                                    {c}
-                                </option>
-                            ))}
-                        </select>
+                        />
                     </div>
 
                     {/* 3. Remote Only */}

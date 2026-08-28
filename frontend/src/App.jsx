@@ -13,6 +13,7 @@ import { AITaskAssistant } from './components/AITaskAssistant';
 import { BottomNav } from './components/BottomNav';
 import { MobileFilterDrawer } from './components/MobileFilterDrawer';
 import { ChatsDrawer } from './components/ChatsDrawer';
+import CityInput, { POPULAR_CITIES } from './components/CityInput';
 import deloArt from './assets/delo_art.jpg';
 
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
@@ -32,12 +33,7 @@ const CATEGORIES = [
     { value: 'other', label: '📦 Другое' }
 ];
 
-const CITIES = [
-    "Москва", "Санкт-Петербург", "Новосибирск", "Екатеринбург",
-    "Казань", "Нижний Новгород", "Челябинск", "Самара",
-    "Омск", "Ростов-на-Дону", "Уфа", "Красноярск",
-    "Воронеж", "Пермь", "Волгоград", "Краснодар"
-];
+const CITIES = POPULAR_CITIES;
 
 // ---- Design system: shared class recipes (dark modern, glass & glow) ----
 const inputCls = "w-full rounded-xl border border-border bg-surface-2 text-ink placeholder-muted/60 p-3 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/40";
@@ -321,12 +317,12 @@ const CreateTaskModal = ({ onClose, onTaskCreated }) => {
                             </div>
                             <div>
                                 <label className={labelCls}>Город</label>
-                                <select value={city} onChange={e => setCity(e.target.value)} className={inputCls}>
-                                    <option value="">Выберите город</option>
-                                    {CITIES.map(c => (
-                                        <option key={c} value={c}>{c}</option>
-                                    ))}
-                                </select>
+                                <CityInput
+                                    value={city}
+                                    onChange={setCity}
+                                    placeholder="Введите или выберите город..."
+                                    className={inputCls}
+                                />
                             </div>
                             <div>
                                 <label className={labelCls}>Адрес</label>
@@ -682,12 +678,12 @@ const ProfilePage = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className={labelCls}>Город</label>
-                            <select value={city} onChange={e => setCity(e.target.value)} className={inputCls}>
-                                <option value="">Выберите город</option>
-                                {CITIES.map(c => (
-                                    <option key={c} value={c}>{c}</option>
-                                ))}
-                            </select>
+                            <CityInput
+                                value={city}
+                                onChange={setCity}
+                                placeholder="Введите или выберите город..."
+                                className={inputCls}
+                            />
                         </div>
                         <div>
                             <label className={labelCls}>Телефон</label>
@@ -1619,16 +1615,14 @@ const Feed = () => {
                             <option key={cat.value} value={cat.value}>{cat.label}</option>
                         ))}
                     </select>
-                    <select
-                        className="h-[50px] w-full rounded-xl border border-border bg-surface-2 text-ink px-3 font-semibold outline-none focus:border-accent transition cursor-pointer"
-                        value={cityFilter}
-                        onChange={(e) => setCityFilter(e.target.value)}
-                    >
-                        <option value="">Все города</option>
-                        {CITIES.map(c => (
-                            <option key={c} value={c}>{c}</option>
-                        ))}
-                    </select>
+                    <div className="w-full">
+                        <CityInput
+                            value={cityFilter}
+                            onChange={setCityFilter}
+                            placeholder="Все города (или введите свой)..."
+                            className="h-[50px] w-full rounded-xl border border-border bg-surface-2 text-ink px-3 font-semibold outline-none focus:border-accent transition"
+                        />
+                    </div>
                     <label className="h-[50px] flex items-center gap-3 rounded-xl border border-border bg-surface-2 px-4 cursor-pointer select-none transition hover:border-border-bright">
                         <input
                             type="checkbox"
