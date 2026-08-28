@@ -12,10 +12,11 @@ export const BottomNav = ({
     const { isAuth } = useAuthStore();
     const {
         viewMode,
-        setViewMode,
-        setAuthOpen,
-        setCreateTaskOpen,
-        setChatsOpen
+        closeAllOverlays,
+        openFeed,
+        openCreateTask,
+        openChats,
+        openAuth
     } = useNavStore();
 
     const isHomePage = location.pathname === '/';
@@ -47,51 +48,63 @@ export const BottomNav = ({
         }, 100);
     };
 
+    // 1. «Заказы» (Список)
     const handleFeedClick = () => {
         triggerHaptic('selection');
-        setViewMode('list');
+        // Закрываем все открытые окна/шторки и переключаем на список заказов
+        openFeed('list');
         if (!isHomePage) {
             navigate('/?view=list');
         }
         scrollToFeed();
     };
 
+    // 2. «Карта»
     const handleMapClick = () => {
         triggerHaptic('selection');
-        setViewMode('map');
+        // Закрываем все открытые окна/шторки и переключаем на карту
+        openFeed('map');
         if (!isHomePage) {
             navigate('/?view=map');
         }
         scrollToFeed();
     };
 
+    // 3. «+» (Создать заказ)
     const handleCreateClick = () => {
         triggerHaptic('medium');
+        // Закрываем все предыдущие окна/шторки
+        closeAllOverlays();
         if (!isAuth) {
-            setAuthOpen(true);
+            openAuth();
             return;
         }
 
         if (!isHomePage) {
             navigate('/?create=true');
         }
-        setCreateTaskOpen(true);
+        openCreateTask();
     };
 
+    // 4. «Чаты»
     const handleMessagesClick = () => {
         triggerHaptic('light');
+        // Закрываем все предыдущие окна/шторки и открываем только чаты
+        closeAllOverlays();
         if (!isAuth) {
-            setAuthOpen(true);
+            openAuth();
             return;
         }
-        // Open sliding side drawer on top of current view!
-        setChatsOpen(true);
+        openChats();
     };
 
+    // 5. «Профиль»
     const handleProfileClick = () => {
         triggerHaptic('selection');
+        // Закрываем все открытые окна/шторки и переходим в профиль
+        closeAllOverlays();
         if (!isAuth) {
-            setAuthOpen(true);
+            openAuth();
             return;
         }
         navigate('/profile');

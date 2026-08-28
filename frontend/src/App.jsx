@@ -1225,20 +1225,45 @@ const Feed = () => {
                 setChatTask(e.detail);
             }
         };
+        const handleCloseAllModals = () => {
+            setSelectedTask(null);
+            setViewingResponsesTask(null);
+            setChatTask(null);
+            setReviewingTask(null);
+            setShowCreateModal(false);
+            setShowMobileFilters(false);
+            setLightbox(null);
+            setConfirmingComplete(false);
+            setResponseText('');
+            setProposedPrice('');
+            setEstimatedDays('');
+            if (wsRef.current) {
+                wsRef.current.close();
+                wsRef.current = null;
+            }
+        };
+
         window.addEventListener('delo:set-view-mode', handleSetViewMode);
         window.addEventListener('delo:open-create-task', handleOpenCreateTask);
         window.addEventListener('delo:open-task-chat', handleOpenTaskChat);
+        window.addEventListener('delo:close-all-modals', handleCloseAllModals);
         return () => {
             window.removeEventListener('delo:set-view-mode', handleSetViewMode);
             window.removeEventListener('delo:open-create-task', handleOpenCreateTask);
             window.removeEventListener('delo:open-task-chat', handleOpenTaskChat);
+            window.removeEventListener('delo:close-all-modals', handleCloseAllModals);
         };
     }, [setViewMode, setCreateTaskOpen]);
 
     // Sync activeChatTask from store
     useEffect(() => {
         if (activeChatTask) {
+            setSelectedTask(null);
+            setViewingResponsesTask(null);
+            setShowCreateModal(false);
             setChatTask(activeChatTask);
+        } else if (!activeChatTask && chatTask) {
+            setChatTask(null);
         }
     }, [activeChatTask]);
 
@@ -2085,14 +2110,22 @@ export default function App() {
         }
     }, [isChatsOpen, isAuthOpen, showAuthModal, isCreateTaskOpen, activeChatTask, setChatsOpen, setAuthOpen, setCreateTaskOpen, setActiveChatTask]);
 
-    // Listen for global open-auth events (from BottomNav, buttons, etc.)
+    // Listen for global open-auth and close-all-modals events
     useEffect(() => {
         const handleOpenAuth = () => {
             setShowAuthModal(true);
             setAuthOpen(true);
         };
+        const handleCloseAllModals = () => {
+            setShowAuthModal(false);
+            setAuthOpen(false);
+        };
         window.addEventListener('delo:open-auth', handleOpenAuth);
-        return () => window.removeEventListener('delo:open-auth', handleOpenAuth);
+        window.addEventListener('delo:close-all-modals', handleCloseAllModals);
+        return () => {
+            window.removeEventListener('delo:open-auth', handleOpenAuth);
+            window.removeEventListener('delo:close-all-modals', handleCloseAllModals);
+        };
     }, [setAuthOpen]);
 
     return (

@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
+import { useNavStore } from '../store/navStore';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export const ChatsDrawer = ({ isOpen, onClose, onSelectTask }) => {
     const { token, role, isAuth } = useAuthStore();
+    const { closeAllOverlays, openAuth, openFeed, openTaskChat } = useNavStore();
     const [tasks, setTasks] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -21,8 +23,6 @@ export const ChatsDrawer = ({ isOpen, onClose, onSelectTask }) => {
             headers: { Authorization: `Bearer ${token}` }
         })
         .then(res => {
-            // Find tasks where current user is customer or executor or has responded
-            // For now, filter tasks that are relevant (in_progress, completed, or with status)
             const allTasks = res.data || [];
             setTasks(allTasks);
         })
@@ -50,7 +50,10 @@ export const ChatsDrawer = ({ isOpen, onClose, onSelectTask }) => {
                     </div>
                     <button
                         type="button"
-                        onClick={onClose}
+                        onClick={() => {
+                            if (onClose) onClose();
+                            closeAllOverlays();
+                        }}
                         className="w-9 h-9 rounded-xl bg-surface-2 border border-border text-ink hover:border-accent hover:text-accent flex items-center justify-center font-bold transition"
                     >
                         ✕
@@ -69,8 +72,8 @@ export const ChatsDrawer = ({ isOpen, onClose, onSelectTask }) => {
                             <button
                                 type="button"
                                 onClick={() => {
-                                    onClose();
-                                    window.dispatchEvent(new CustomEvent('delo:open-auth'));
+                                    closeAllOverlays();
+                                    openAuth();
                                 }}
                                 className="mt-4 px-5 py-2.5 rounded-xl bg-accent text-white font-bold text-xs uppercase tracking-wider hover:bg-accent-bright transition"
                             >
@@ -100,9 +103,8 @@ export const ChatsDrawer = ({ isOpen, onClose, onSelectTask }) => {
                             <button
                                 type="button"
                                 onClick={() => {
-                                    onClose();
-                                    window.dispatchEvent(new CustomEvent('delo:set-view-mode', { detail: 'list' }));
-                                    window.location.href = '/';
+                                    openFeed('list');
+                                    window.location.href = '/?view=list';
                                 }}
                                 className="mt-4 px-4 py-2 rounded-xl bg-surface-2 border border-border text-xs font-bold uppercase tracking-wider hover:border-accent transition"
                             >
@@ -118,11 +120,11 @@ export const ChatsDrawer = ({ isOpen, onClose, onSelectTask }) => {
                                 <div
                                     key={task.id}
                                     onClick={() => {
-                                        onClose();
+                                        closeAllOverlays();
                                         if (onSelectTask) {
                                             onSelectTask(task);
                                         } else {
-                                            window.dispatchEvent(new CustomEvent('delo:open-task-chat', { detail: task }));
+                                            openTaskChat(task);
                                         }
                                     }}
                                     className="p-3.5 rounded-xl bg-surface-2/80 hover:bg-surface-2 border border-border hover:border-accent transition cursor-pointer flex flex-col gap-1.5 group"
@@ -157,7 +159,10 @@ export const ChatsDrawer = ({ isOpen, onClose, onSelectTask }) => {
                 <div className="pt-3 border-t border-border">
                     <button
                         type="button"
-                        onClick={onClose}
+                        onClick={() => {
+                            if (onClose) onClose();
+                            closeAllOverlays();
+                        }}
                         className="w-full py-2.5 rounded-xl bg-surface-2 border border-border font-bold text-xs uppercase tracking-wider text-muted hover:text-ink transition"
                     >
                         Закрыть
