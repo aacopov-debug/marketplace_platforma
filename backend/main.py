@@ -2,6 +2,9 @@ from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocke
 from fastapi.responses import Response as FastResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
 from fastapi.staticfiles import StaticFiles
 import json
 import asyncio
@@ -40,8 +43,18 @@ if DB_URL.startswith("postgres://"):
     DB_URL = DB_URL.replace("postgres://", "postgresql+psycopg2://", 1)
 elif DB_URL.startswith("postgresql://"):
     DB_URL = DB_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
-connect_args = {"check_same_thread": False} if "sqlite" in DB_URL else {}
+connect_args = {"check_same_thread": False, "timeout": 30} if "sqlite" in DB_URL else {}
 engine = create_engine(DB_URL, connect_args=connect_args, pool_pre_ping=True)
+
+if "sqlite" in DB_URL:
+    @event.listens_for(Engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL;")
+        cursor.execute("PRAGMA synchronous=NORMAL;")
+        cursor.execute("PRAGMA cache_size=-64000;")  # 64MB кэш в памяти
+        cursor.execute("PRAGMA busy_timeout=30000;")
+        cursor.close()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 

@@ -14,11 +14,12 @@ import json
 import os
 import time
 import urllib.request
+import urllib.error
 from html import escape as _html_escape
 
 BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "")
-API_BASE = os.environ.get("API_URL", "https://delos-backend.onrender.com")
-FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://delo-jhcy.onrender.com")
+API_BASE = os.environ.get("API_URL", "https://delos-backend.onrender.com").rstrip("/")
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://delo-jhcy.onrender.com").rstrip("/")
 SUBS_FILE = os.environ.get("SUBS_FILE", "subscriptions.json")
 
 CATEGORIES = {
@@ -38,18 +39,32 @@ CATEGORIES = {
 
 
 def tg(method, _http_timeout=15, **params):
+    """Выполняет запрос к Telegram Bot API с безопасной обработкой сетевых и HTTP ошибок."""
     if not BOT_TOKEN:
         return {"ok": False, "description": "No bot token"}
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/{method}"
     data = json.dumps(params).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=_http_timeout) as r:
-        return json.loads(r.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=_http_timeout) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        error_body = ""
+        try:
+            error_body = e.read().decode("utf-8")
+            parsed = json.loads(error_body)
+            return parsed
+        except Exception:
+            return {"ok": False, "error_code": e.code, "description": str(e)}
+    except urllib.error.URLError as e:
+        return {"ok": False, "description": f"URLError: {e.reason}"}
+    except Exception as e:
+        return {"ok": False, "description": f"Unexpected error: {str(e)}"}
 
 
 def load_subs():
     """
-    Возвращает словарь {str(chat_id): {
+    Загружает словарь подписок {str(chat_id): {
         'enabled': True,
         'categories': ['repairs', 'cleaning'] or [],
         'min_budget': 0,
@@ -57,6 +72,8 @@ def load_subs():
     }}
     """
     try:
+        if not os.path.exists(SUBS_FILE):
+            return {}
         with open(SUBS_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
             # Миграция старого формата [123, 456] в словарь
@@ -70,20 +87,34 @@ def load_subs():
                         "city": ""
                     }
                 return migrated
-            return data
-    except Exception:
+            if isinstance(data, dict):
+                return data
+            return {}
+    except Exception as e:
+        print(f"load_subs error: {e}")
         return {}
 
 
 def save_subs(subs):
-    with open(SUBS_FILE, "w", encoding="utf-8") as f:
-        json.dump(subs, f, ensure_ascii=False, indent=2)
+    """Атомарная запись файла подписок во избежание повреждения данных при сбоях."""
+    tmp_file = f"{SUBS_FILE}.tmp"
+    try:
+        with open(tmp_file, "w", encoding="utf-8") as f:
+            json.dump(subs, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_file, SUBS_FILE)
+    except Exception as e:
+        print(f"save_subs error: {e}")
+        if os.path.exists(tmp_file):
+            try:
+                os.remove(tmp_file)
+            except Exception:
+                pass
 
 
 def get_user_sub(chat_id):
     subs = load_subs()
     cid = str(chat_id)
-    if cid not in subs:
+    if cid not in subs or not isinstance(subs[cid], dict):
         subs[cid] = {
             "enabled": True,
             "categories": [],  # пусто = все категории
@@ -97,38 +128,56 @@ def get_user_sub(chat_id):
 def fetch_new_tasks(last_id):
     """Возвращает заказы с id больше last_id."""
     try:
-        with urllib.request.urlopen(f"{API_BASE}/tasks/", timeout=30) as r:
+        req = urllib.request.Request(
+            f"{API_BASE}/tasks/",
+            headers={"User-Agent": "DeloTelegramBot/2.0"}
+        )
+        with urllib.request.urlopen(req, timeout=15) as r:
             tasks = json.loads(r.read().decode("utf-8"))
     except Exception as e:
         print("tasks fetch error:", e)
         return [], last_id
-    if not tasks:
+        
+    if not isinstance(tasks, list) or not tasks:
         return [], last_id
-    max_id = max(t["id"] for t in tasks)
+        
+    max_id = max((t.get("id", 0) for t in tasks if isinstance(t, dict)), default=0)
     if last_id is None:
         return [], max_id  # при старте запоминаем текущий максимум
-    fresh = [t for t in tasks if t["id"] > last_id]
+        
+    fresh = [t for t in tasks if isinstance(t, dict) and t.get("id", 0) > last_id]
     return fresh, max_id
 
 
 def task_matches_sub(task, sub):
-    if not sub.get("enabled", True):
+    if not isinstance(sub, dict) or not sub.get("enabled", True):
         return False
     
     # Фильтр по минимальному бюджету
-    task_budget = task.get("budget") or 0
-    min_budget = sub.get("min_budget") or 0
-    if task_budget and min_budget and task_budget < min_budget:
+    try:
+        task_budget = float(task.get("budget") or 0)
+    except (ValueError, TypeError):
+        task_budget = 0.0
+        
+    try:
+        min_budget = float(sub.get("min_budget") or 0)
+    except (ValueError, TypeError):
+        min_budget = 0.0
+        
+    if min_budget > 0 and task_budget < min_budget:
         return False
     
     # Фильтр по категориям
     cats = sub.get("categories") or []
-    if cats and task.get("category") not in cats:
-        return False
+    if cats:
+        if cats == ["__none__"]:
+            return False
+        if task.get("category") not in cats:
+            return False
     
-    # Фильтр по городу (если указан и заказ не удаленный)
+    # Фильтр по городу (если указан в подписке и заказ не удаленный)
     sub_city = (sub.get("city") or "").strip().lower()
-    if sub_city and not task.get("is_remote"):
+    if sub_city and not task.get("is_remote", False):
         task_city = (task.get("city") or "").strip().lower()
         if sub_city not in task_city:
             return False
@@ -145,8 +194,14 @@ def notify_matching(task):
     title = _html_escape(str(task.get("title", "")))
     cat_label = _html_escape(str(cat))
     place_label = _html_escape(place)
-    budget = task.get('budget') or 0
-    task_id = task['id']
+    
+    try:
+        budget = float(task.get('budget') or 0)
+        budget_str = f"{budget:,.0f} ₽".replace(",", " ")
+    except Exception:
+        budget_str = "Договорная"
+        
+    task_id = task.get('id', 0)
     task_url = f"{FRONTEND_URL}/task/{task_id}"
 
     text = (
@@ -154,7 +209,7 @@ def notify_matching(task):
         f"<b>{title}</b>\n"
         f"📂 Категория: {cat_label}\n"
         f"{place_label}\n"
-        f"💰 <b>Бюджет: {budget:,.0f} ₽</b>\n\n".replace(",", " ")
+        f"💰 <b>Бюджет: {budget_str}</b>\n\n"
     )
     
     # Кнопки быстрого действия (включая WebApp для Telegram Mini App)
@@ -180,13 +235,21 @@ def notify_matching(task):
     }
 
     subs = load_subs()
-    for cid, sub in subs.items():
+    for cid, sub in list(subs.items()):
         if task_matches_sub(task, sub):
-            try:
-                tg("sendMessage", chat_id=cid, text=text, parse_mode="HTML",
-                   reply_markup=reply_markup, disable_web_page_preview=True)
-            except Exception as e:
-                print(f"send to {cid} failed:", e)
+            res = tg("sendMessage", chat_id=cid, text=text, parse_mode="HTML",
+                     reply_markup=reply_markup, disable_web_page_preview=True)
+            if not res.get("ok"):
+                error_code = res.get("error_code")
+                desc = res.get("description", "").lower()
+                # Если пользователь заблокировал бота или чат удален — отключаем подписку
+                if error_code == 403 or "blocked" in desc or "not found" in desc or "deactivated" in desc:
+                    print(f"User {cid} blocked the bot or chat lost. Disabling radar.")
+                    sub["enabled"] = False
+                    subs[cid] = sub
+                    save_subs(subs)
+                else:
+                    print(f"send to {cid} failed: {res}")
 
 
 def get_radar_keyboard(sub):
@@ -230,19 +293,24 @@ def handle_callback_query(upd):
     cq = upd.get("callback_query")
     if not cq:
         return
-    cb_id = cq["id"]
-    chat_id = str(cq["message"]["chat"]["id"])
-    msg_id = cq["message"]["message_id"]
+    cb_id = cq.get("id")
+    msg = cq.get("message")
+    if not msg or "chat" not in msg:
+        return
+    chat_id = str(msg["chat"]["id"])
+    msg_id = msg.get("message_id")
     data = cq.get("data", "")
     
     subs = load_subs()
-    if chat_id not in subs:
+    if chat_id not in subs or not isinstance(subs[chat_id], dict):
         subs[chat_id] = {"enabled": True, "categories": [], "min_budget": 0, "city": ""}
     sub = subs[chat_id]
     
     if data.startswith("toggle_cat:"):
         cat_key = data.split(":", 1)[1]
         cats = sub.get("categories", [])
+        if cats == ["__none__"]:
+            cats = []
         if cat_key in cats:
             cats.remove(cat_key)
         else:
@@ -295,7 +363,7 @@ def send_radar_menu(chat_id):
     text = (
         f"🎯 <b>Настройка «Радара заказов» ДЕЛО</b>\n\n"
         f"Здесь вы можете выбрать интересные категории и параметры, чтобы получать заказы первыми:\n\n"
-        f"📂 <b>Категории:</b> {cats_label}\n"
+        f"📂 <b>Категории:</b> {_html_escape(cats_label)}\n"
         f"💰 <b>Мин. цена:</b> {sub.get('min_budget', 0)} ₽\n"
         f"🔔 <b>Статус:</b> {'Включен' if sub.get('enabled', True) else 'Выключен'}\n\n"
         f"<i>Нажимайте на кнопки ниже для переключения:</i>"
@@ -311,7 +379,9 @@ def handle_update(upd):
     msg = upd.get("message") or upd.get("channel_post")
     if not msg:
         return
-    chat_id = msg["chat"]["id"]
+    chat_id = msg.get("chat", {}).get("id")
+    if not chat_id:
+        return
     text = (msg.get("text") or "").strip()
     subs = load_subs()
     
@@ -372,25 +442,36 @@ def start_health_server():
     class H(BaseHTTPRequestHandler):
         def do_GET(self):
             self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.end_headers()
             self.wfile.write("ДЕЛО бот и Радар заказов работают".encode("utf-8"))
 
         def log_message(self, *a):
             pass
 
-    server = HTTPServer(("0.0.0.0", port), H)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        server = HTTPServer(("0.0.0.0", port), H)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        print(f"Health server started on port {port}")
+    except Exception as e:
+        print(f"Health server start failed: {e}")
 
 
 def main():
     if not BOT_TOKEN:
-        print("TG_BOT_TOKEN не задан — бот не запущен")
+        print("TG_BOT_TOKEN не задан — бот ожидает токен")
+        # Все равно запускаем health server для Render
+        start_health_server()
+        while True:
+            time.sleep(60)
         return
+
     start_health_server()
     try:
         tg("deleteWebhook", drop_pending_updates=False)
     except Exception as e:
         print("deleteWebhook error:", e)
+
     print("Bot and Order Radar started, polling...")
     offset = None
     last_task_id = None
