@@ -129,3 +129,38 @@ def get_payment_status(payment_id: str) -> dict:
         }
     except Exception as e:
         return {"error": str(e)}
+
+
+def verify_webhook_signature(payload_bytes: bytes, signature: str) -> bool:
+    """Проверка подписи вебхука YooKassa (HMAC SHA-256).
+
+    Каноническая строка: "amount.value|amount.currency|captured_at|created_at|description|id|ip|metadata|payment_method|recipient.account_id|recipient.gateway_id|refundable|refunded_amount.value|refunded_amount.currency|status|test" с подстановкой соответствующих значений из JSON-тела, разделённых '|'. Подробности: https://yookassa.ru/docs/support/merchant/payments/onboarding#webhooks-signature (актуальный порядок полей в канонической строке уточняйте в документации; реализовано для типового набора).
+    """
+    try:
+        import hashlib
+        import hmac
+        if not YOOKASSA_SECRET_KEY:
+            return False
+        import json as _json
+        data = _json.loads(payload_bytes.decode("utf-8"))
+        obj = data.get("object", data)
+        def g(*keys):
+            cur = obj
+            for k in keys:
+                if not isinstance(cur, dict) or k not in cur:
+                    return ""
+                cur = cur[k]
+            return str(cur)
+        canonical = "|".join([
+            g("amount", "value"), g("amount", "currency"),
+            g("captured_at"), g("created_at"), g("description"),
+            g("id"), g("ip"), g("metadata"),
+            g("payment_method"), g("recipient", "account_id"), g("recipient", "gateway_id"),
+            g("refundable"), g("refunded_amount", "value"), g("refunded_amount", "currency"),
+            g("status"), g("test"),
+        ])
+        expected = hmac.new(YOOKASSA_SECRET_KEY.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256).hexdigest()
+        return hmac.compare_digest(expected, (signature or "").lower())
+    except Exception:
+        return False
+

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import { api } from '../api';
 import { useToast } from './Toast';
 
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
@@ -26,7 +26,7 @@ export const AITaskAssistant = ({ onApplyTask, onCancel }) => {
 
         setLoading(true);
         try {
-            const res = await axios.post(`${API_URL}/ai/parse-task`, { prompt: textToUse });
+            const res = await api.post(`${API_URL}/ai/parse-task`, { prompt: textToUse });
             setResult(res.data);
             toast.success('Задание успешно обработано AI!');
             

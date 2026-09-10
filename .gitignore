@@ -60,3 +60,9 @@ backend/main_backup.py
 /PHOTO_UPLOAD_COMPLETE.md
 /PROGRESS.md
 /STATUS.md
+*.db
+*.db-shm
+*.db-wal
+__pycache__/
+*.pyc
+backend/app/__pycache__/

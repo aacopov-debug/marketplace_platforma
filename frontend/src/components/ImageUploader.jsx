@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import { api } from '../api';
 
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
@@ -30,7 +30,7 @@ export const ImageUploader = ({ token, endpoint, onUploadSuccess, buttonText = "
             const formData = new FormData();
             formData.append('file', file);
 
-            const res = await axios.post(`${API_URL}${endpoint}`, formData, {
+            const res = await api.post(`${API_URL}${endpoint}`, formData, {
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'multipart/form-data'

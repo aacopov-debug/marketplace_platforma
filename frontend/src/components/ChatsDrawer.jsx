@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
+import { api } from '../api';
 import { useAuthStore } from '../store/authStore';
 import { useNavStore } from '../store/navStore';
 
@@ -19,7 +19,7 @@ export const ChatsDrawer = ({ isOpen, onClose, onSelectTask }) => {
         setError(null);
 
         // Fetch user tasks to find all active dialogues
-        axios.get(`${API_URL}/tasks/`, {
+        api.get(`${API_URL}/tasks/`, {
             headers: { Authorization: `Bearer ${token}` }
         })
         .then(res => {

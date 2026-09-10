@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import { api } from '../api';
 
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
@@ -20,13 +20,13 @@ export const NotificationBell = ({ token }) => {
     const headers = { Authorization: `Bearer ${token}` };
 
     const fetchCount = () => {
-        axios.get(`${API_URL}/notifications/unread-count`, { headers })
+        api.get(`${API_URL}/notifications/unread-count`, { headers })
             .then(r => setCount(r.data.count))
             .catch(() => {});
     };
 
     const fetchAll = () => {
-        axios.get(`${API_URL}/notifications`, { headers })
+        api.get(`${API_URL}/notifications`, { headers })
             .then(r => setNotifs(r.data))
             .catch(() => {});
     };
@@ -54,13 +54,13 @@ export const NotificationBell = ({ token }) => {
     };
 
     const markAllRead = async () => {
-        await axios.put(`${API_URL}/notifications/read-all`, {}, { headers });
+        await api.put(`${API_URL}/notifications/read-all`, {}, { headers });
         setCount(0);
         setNotifs(n => n.map(x => ({ ...x, is_read: true })));
     };
 
     const markRead = async (id) => {
-        await axios.put(`${API_URL}/notifications/${id}/read`, {}, { headers });
+        await api.put(`${API_URL}/notifications/${id}/read`, {}, { headers });
         setNotifs(n => n.map(x => x.id === id ? { ...x, is_read: true } : x));
         setCount(c => Math.max(0, c - 1));
     };
